@@ -1,0 +1,4 @@
+# Generated dataset (432 images + labels — hundreds of MB, fully reproducible)
+dataset/
+# Per-run evidence artifacts
+.omo/evidence/
