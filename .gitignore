@@ -2,3 +2,14 @@
 dataset/
 # Per-run evidence artifacts
 .omo/evidence/
+# Python virtual environment
+.venv/
+# Python cache
+__pycache__/
+*.pyc
+# Source data (large, not for distribution)
+data/
+# Generated training/eval/inference outputs
+runs/
+# Pretrained model weights (large, downloadable)
+*.pt
