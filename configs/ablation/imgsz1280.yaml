@@ -1,0 +1,7 @@
+# @package _global_
+# ── Ablation: image_size = 1280 (high resolution) ─────────
+# Use: python train.py experiment=yolo26m ablation=imgsz1280
+# CAUTION: Batch size may need reduction at 1280 px for 8 GB VRAM
+
+data:
+  image_size: 1280

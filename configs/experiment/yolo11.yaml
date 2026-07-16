@@ -1,0 +1,15 @@
+# @package _global_
+# ── YOLO11 medium ─────────────────────────────────────────
+# Batch size: 16 (fits 8 GB VRAM on RTX 5070 Laptop)
+# NOTE: weight filename is yolo11m.pt (no "v" prefix, NOT yolov11m.pt)
+
+experiment:
+  name: yolo11m
+  description: "YOLO11 medium — 38.8M params, latest YOLO baseline"
+
+model:
+  name: yolo11m
+  variant: medium
+
+training:
+  batch_size: 16

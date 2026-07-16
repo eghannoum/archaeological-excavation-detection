@@ -11,5 +11,15 @@ __pycache__/
 data/
 # Generated training/eval/inference outputs
 runs/
+outputs/
+experiments/
+# MLflow experiment tracking database
+mlruns/
+
 # Pretrained model weights (large, downloadable)
 *.pt
+
+# Temporary & working files
+working/
+.tmp/
+dataset/folds/

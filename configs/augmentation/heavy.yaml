@@ -1,0 +1,82 @@
+# ── Heavy Albumentations augmentation ─────────────────────
+# All light transforms plus spatial + noise-based augmentations
+
+enabled: true
+mode: heavy
+
+ultralytics:
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  fliplr: 0.5
+  mosaic: 1.0
+  mixup: 0.0
+  copy_paste: 0.0
+  close_mosaic: 10
+
+albumentations:
+  # ── Light transforms (included) ────────────────────────
+  - transform: HorizontalFlip
+    params:
+      p: 0.5
+
+  - transform: RandomBrightnessContrast
+    params:
+      p: 0.3
+      brightness_limit: 0.2
+      contrast_limit: 0.2
+
+  - transform: HueSaturationValue
+    params:
+      p: 0.2
+      hue_shift_limit: 20
+      sat_shift_limit: 30
+      val_shift_limit: 20
+
+  - transform: Blur
+    params:
+      p: 0.2
+      blur_limit: 3
+
+  # ── Heavy transforms ──────────────────────────────────
+  - transform: RandomRotate90
+    params:
+      p: 0.5
+
+  - transform: ShiftScaleRotate
+    params:
+      p: 0.5
+      shift_limit_x: 0.1
+      shift_limit_y: 0.1
+      scale_limit: 0.2
+      rotate_limit: 45
+      border_mode: 0            # cv2.BORDER_CONSTANT
+
+  - transform: RandomGamma
+    params:
+      p: 0.3
+      gamma_limit: [80, 120]
+
+  - transform: CLAHE
+    params:
+      p: 0.2
+      clip_limit: 4.0
+      tile_grid_size: [8, 8]
+
+  - transform: CoarseDropout
+    params:
+      p: 0.3
+      max_holes: 8
+      max_height: 64
+      max_width: 64
+      fill_value: 0
+
+  - transform: ISONoise
+    params:
+      p: 0.2
+      intensity: 0.2
+      color_shift: 0.05

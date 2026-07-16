@@ -1,0 +1,6 @@
+# @package _global_
+# ── Ablation: image_size = 640 (default resolution) ───────
+# Use: python train.py experiment=yolo26m ablation=imgsz640
+
+data:
+  image_size: 640

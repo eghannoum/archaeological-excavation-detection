@@ -1,0 +1,22 @@
+# @package _global_
+# ── Faster R-CNN (torchvision) ────────────────────────────
+# Batch size: 8 (fits 8 GB VRAM on RTX 5070 Laptop)
+# NOTE: Uses torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+# The model downloads its own weights from torchvision — not from our models/ dir.
+# Training uses Detectron2-style config. Impl in Task 8.
+
+experiment:
+  name: faster_rcnn
+  description: "Faster R-CNN ResNet-50 FPN — two-stage detector baseline"
+
+model:
+  name: faster_rcnn
+  variant: resnet50_fpn
+  arch: fasterrcnn_resnet50_fpn
+  weights: null                # torchvision loads pretrained=True internally
+
+training:
+  batch_size: 8
+  optimizer: SGD               # torchvision detection default
+  lr: 0.005
+  weight_decay: 0.0005

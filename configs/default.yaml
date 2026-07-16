@@ -1,0 +1,26 @@
+# @package _global_
+# Top-level Hydra config for archaeological hole detection ML pipeline
+
+defaults:
+  - data: default
+  - model: default
+  - training: default
+  - evaluation: default
+  - experiment: default
+  - paths: default
+  - augmentation: ultralytics_base
+  - cv: default
+  - hpo: default
+  - ablation: null
+  - _self_
+
+# -- Project metadata --
+project:
+  name: STI-Unauthorized-Archaeological-Excavations
+  task: detect
+  description: "Archaeological hole detection from aerial imagery"
+  pipeline: research_ml
+
+# -- Runtime flags --
+debug: false
+dry_run: false

@@ -1,0 +1,15 @@
+# @package _global_
+# ── YOLOv8 medium ─────────────────────────────────────────
+# Batch size: 16 (fits 8 GB VRAM on RTX 5070 Laptop)
+# Legacy comparison baseline against YOLO26 and YOLO11
+
+experiment:
+  name: yolov8m
+  description: "YOLOv8 medium — 49.7M params, legacy baseline"
+
+model:
+  name: yolov8m
+  variant: medium
+
+training:
+  batch_size: 16

@@ -1,0 +1,8 @@
+# @package _global_
+# ── Ablation: light augmentation ──────────────────────────
+# Uses augmentations/light.yaml profile
+# Use: python train.py experiment=yolo26m ablation=aug_light
+
+defaults:
+  - override /augmentation: light
+  - _self_

@@ -36,7 +36,7 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = PROJECT_ROOT / "runs"
-TRAIN_DIR = RUNS_DIR / "train" / "yolo26n-hole"
+TRAIN_DIR = RUNS_DIR / "train" / "yolo26m-hole"
 EVAL_DIR = RUNS_DIR / "eval"
 DATASET_TEST_DIR = PROJECT_ROOT / "dataset" / "images" / "test"
 
@@ -546,12 +546,12 @@ button.primary:hover { background: linear-gradient(135deg, #2a5a8f 0%, #3a7abf 1
 def create_demo() -> gr.Blocks:
     """Build and return the Gradio Blocks app."""
     with gr.Blocks(
-        title="Hole Detection Dashboard \u2014 YOLO26n",
+        title="Hole Detection Dashboard \u2014 YOLO26m",
         fill_height=False,
     ) as demo:
         gr.Markdown(
             "# Unauthorized Archaeological Excavation Detection\n"
-            "**YOLO26n** \u2014 Satellite & aerial imagery analysis "
+            "**YOLO26m** \u2014 Satellite & aerial imagery analysis "
             "for cultural heritage protection"
         )
 

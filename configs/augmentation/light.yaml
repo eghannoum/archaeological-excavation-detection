@@ -1,0 +1,42 @@
+# ── Light Albumentations augmentation ─────────────────────
+# Minimal external augmentations on top of Ultralytics base
+
+enabled: true
+mode: light
+
+ultralytics:
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  fliplr: 0.5
+  mosaic: 1.0
+  mixup: 0.0
+  copy_paste: 0.0
+  close_mosaic: 10
+
+albumentations:
+  - transform: HorizontalFlip
+    params:
+      p: 0.5
+
+  - transform: RandomBrightnessContrast
+    params:
+      p: 0.3
+      brightness_limit: 0.2
+      contrast_limit: 0.2
+
+  - transform: HueSaturationValue
+    params:
+      p: 0.2
+      hue_shift_limit: 20
+      sat_shift_limit: 30
+      val_shift_limit: 20
+
+  - transform: Blur
+    params:
+      p: 0.2
+      blur_limit: 3

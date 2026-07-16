@@ -1,111 +1,432 @@
-"""Train YOLO26 on the archaeological hole detection dataset.
+"""Main training entrypoint for the archaeological hole detection ML pipeline.
 
-NOTE: RTX 5070 (Blackwell sm_120) not yet supported by PyTorch CUDA builds.
-Training uses CPU with YOLO26n (nano model) for practical training times.
-For GPU acceleration, use PyTorch ≥ 2.8 with CUDA ≥ 12.8 once available.
+Usage
+-----
+    python scripts/train.py experiment=yolo26n training.epochs=100
+    python scripts/train.py --info                          # dry-run: print config
+    python scripts/train.py experiment=yolo26n ++info=true  # same dry-run via Hydra
+    python scripts/train.py experiment=yolo26n training.epochs=1   # 1-epoch smoke test
+    python scripts/train.py experiment=yolo26n augmentation=heavy
+    python scripts/train.py experiment=yolo26m ablation=imgsz320 optimizer=sgd
+
+Integrates Hydra config (configs/default.yaml) + MLflow tracking (scripts.mlflow_utils).
 """
 
-from pathlib import Path
+from __future__ import annotations
+
+import logging
+import re
 import sys
-import os
-import time
-import torch
-from ultralytics import YOLO
+from pathlib import Path
+from typing import Any, Optional, Tuple
 
-DATA_YAML = Path("dataset/data.yaml")
-PROJECT = "runs/train"
-NAME = "yolo26n-hole"
-MODEL_NAME = "yolo26n.pt"
-EPOCHS = 50
-PATIENCE = 15
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+# regardless of whether the user runs ``python scripts/train.py`` or
+# ``python -m scripts.train``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import hydra  # noqa: E402
+import mlflow  # noqa: E402
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+from omegaconf import DictConfig, OmegaConf  # noqa: E402
+from ultralytics import YOLO  # noqa: E402
+
+from scripts.mlflow_utils import init_mlflow, finish_mlflow  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+PROJECT_ROOT = _PROJECT_ROOT
+"""Absolute path to the project root (two levels up from scripts/)."""
+DATA_YAML = PROJECT_ROOT / "dataset" / "data.yaml"
+"""Path to the Ultralytics-format dataset YAML."""
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    # --- Checks ---
-    if not DATA_YAML.exists():
-        sys.exit(f"ERROR: {DATA_YAML} not found — run from project root")
-
-    # Detect device
-    DEVICE_STR = "cpu"
-    BATCH = 8
-    IMGSZ = 320  # smaller for CPU training speed
-    WORKERS = min(4, os.cpu_count() or 4)
-
+def set_seeds(seed: int) -> None:
+    """Set random seeds for reproducibility across torch and numpy."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     if torch.cuda.is_available():
-        try:
-            gpu = torch.cuda.get_device_name(0)
-            mem = torch.cuda.get_device_properties(0).total_memory / 1e9
-            print(f"GPU detected: {gpu} ({mem:.1f} GB)")
-            test = torch.rand(2, 2).cuda()
-            test = test @ test
-            DEVICE_STR = "cuda:0"
-            BATCH = 16
-            IMGSZ = 640
-            print(f"CUDA works — using GPU (batch={BATCH})")
-        except Exception as e:
-            print(f"CUDA available but GPU compute failed: {e}")
-            print("Falling back to CPU training")
+        torch.cuda.manual_seed_all(seed)
 
-    if DEVICE_STR == "cpu":
-        print("Training on CPU (multi-core)")
-        print(f"  Model:    {MODEL_NAME} (nano — optimized for CPU)")
-        print(f"  CPU cores: {os.cpu_count()}")
 
-    # --- Load model ---
-    print(f"\nLoading YOLO26m pretrained weights...")
-    model = YOLO(MODEL_NAME)
-    print(f"Model loaded — task: {model.task}")
+def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
+    """Translate the resolved Hydra config into Ultralytics ``model.train()`` kwargs.
 
-    # --- Train ---
-    print(f"\nStarting training...")
-    print(f"  Data:     {DATA_YAML}")
-    print(f"  Imgsz:    {IMGSZ}")
-    print(f"  Batch:    {BATCH}")
-    print(f"  Epochs:   {EPOCHS} (patience={PATIENCE})")
-    print(f"  Device:   {DEVICE_STR}")
-    print(f"  Output:   {PROJECT}/{NAME}/\n")
+    Handles paths, hyper-parameters, augmentation overrides, and Ultralytics
+    training flags.  When cross-validation is active (``cv.n_folds > 1``), the
+    fold-specific data YAML at ``dataset/fold_N/data.yaml`` is used instead of
+    the default ``dataset/data.yaml``.
+    """
+    # --- Determine data YAML path (handle CV fold) ---
+    n_folds = getattr(cfg, "cv", {}).get("n_folds", 1)
+    fold = getattr(cfg, "fold", 0) if n_folds > 1 else 0
 
-    results = model.train(
-        data=str(DATA_YAML),
-        epochs=EPOCHS,
-        imgsz=IMGSZ,
-        batch=BATCH,
-        patience=PATIENCE,
-        workers=WORKERS,
-        device=DEVICE_STR,
-        project=PROJECT,
-        name=NAME,
-        exist_ok=True,
-        pretrained=True,
-        optimizer="auto",
-        cos_lr=True,
-        warmup_epochs=3,
-        save=True,
-        save_period=10,
-        val=True,
-        amp=True,
-        lr0=0.01,
-        lrf=0.01,
-        momentum=0.937,
-        weight_decay=0.0005,
+    if n_folds > 1:
+        data_yaml = PROJECT_ROOT / "dataset" / f"fold_{fold}" / "data.yaml"
+        if not data_yaml.exists():
+            logger.warning(
+                "Fold data YAML not found at %s — falling back to default %s",
+                data_yaml,
+                DATA_YAML,
+            )
+            data_yaml = DATA_YAML
+    else:
+        data_yaml = DATA_YAML
+
+    kwargs: dict[str, Any] = {
+        "data": str(data_yaml),
+        "epochs": cfg.training.epochs,
+        "batch": cfg.training.batch_size,
+        "imgsz": cfg.data.image_size,
+        "workers": cfg.training.workers,
+        "device": 0,
+        "pretrained": cfg.model.pretrained,
+        "optimizer": cfg.training.optimizer,
+        "lr0": cfg.training.lr,
+        "weight_decay": cfg.training.weight_decay,
+        "momentum": cfg.training.momentum,
+        "warmup_epochs": cfg.training.scheduler.warmup_epochs,
+        "cos_lr": cfg.training.scheduler.name == "cosine",
+        "val": True,
+        "amp": cfg.training.precision == "fp16",
+        "save": True,
+        "exist_ok": True,
+        "project": str(PROJECT_ROOT / "runs"),
+        "name": cfg.experiment.name,
+    }
+
+    # -- Early stopping --
+    es = cfg.training.get("early_stopping", None)
+    if es and es.get("enabled", False):
+        kwargs["patience"] = es.patience
+        # Ultralytics uses 'patience' for early stopping
+
+    # NOTE: Ultralytics does not expose a native gradient-clip parameter.
+    # The ``training.gradient_clip`` value from config is handled internally
+    # by PyTorch's optimizer (via ``torch.nn.utils.clip_grad_norm_``) when
+    # implementing custom training loops, which is not applicable here.
+
+    # -- Ultralytics augmentation overrides --
+    aug = cfg.get("augmentation", None)
+    if aug and aug.get("enabled", False):
+        ultralytics_aug = getattr(aug, "ultralytics", None)
+        if ultralytics_aug is not None:
+            for k, v in OmegaConf.to_container(ultralytics_aug, resolve=True).items():
+                if k not in kwargs:
+                    kwargs[k] = v
+
+    # Remove None values to avoid confusing Ultralytics
+    return {k: v for k, v in kwargs.items() if v is not None}
+
+
+def _sanitize_metric_name(name: str) -> str:
+    """Replace characters in metric names that MLflow rejects.
+
+    MLflow metric names may only contain alphanumerics, underscores (``_``),
+    dashes (``-``), periods (``.``), spaces (`` ``) and slashes (``/``).
+    This function strips or replaces other characters (e.g. parentheses).
+    """
+    return re.sub(r"[^\w\-./ ]", "", name).strip()
+
+
+def _make_epoch_callback(run_id: str):
+    """Return an Ultralytics ``on_train_epoch_end`` callback that logs per-epoch
+    metrics to the active MLflow run.
+
+    The callback is invoked by Ultralytics after each training epoch.
+    ``trainer.epoch`` (0-indexed) and ``trainer.metrics`` are used for the
+    MLflow step and metric values respectively.
+    """
+    def _on_train_epoch_end(trainer) -> None:
+        if not hasattr(trainer, "metrics") or not trainer.metrics:
+            return
+        step = getattr(trainer, "epoch", None)
+        # Sanitize metric names for MLflow compatibility
+        sanitized = {
+            _sanitize_metric_name(k): v
+            for k, v in trainer.metrics.items()
+        }
+        mlflow.log_metrics(sanitized, step=step)
+
+    return _on_train_epoch_end
+
+
+def _find_best_model(results, experiment_name: str) -> Optional[Path]:
+    """Locate the best model checkpoint produced by an Ultralytics training run.
+
+    Search order:
+    1. ``results.save_dir / weights / best.pt`` (when available)
+    2. ``runs/detect/{experiment_name}/weights/best.pt`` (detection task default)
+    3. ``runs/{experiment_name}/weights/best.pt`` (generic)
+    4. Most recently modified ``weights/best.pt`` in the ``runs/`` tree.
+    """
+    # 1. Results save_dir
+    if hasattr(results, "save_dir") and results.save_dir:
+        candidate = Path(str(results.save_dir)) / "weights" / "best.pt"
+        if candidate.exists():
+            return candidate.resolve()
+
+    # 2. Detection task subdirectory
+    candidate = PROJECT_ROOT / "runs" / "detect" / experiment_name / "weights" / "best.pt"
+    if candidate.exists():
+        return candidate.resolve()
+
+    # 3. Generic runs subdirectory
+    candidate = PROJECT_ROOT / "runs" / experiment_name / "weights" / "best.pt"
+    if candidate.exists():
+        return candidate.resolve()
+
+    # 4. Fallback: newest best.pt in runs/
+    best_pts = sorted(
+        (PROJECT_ROOT / "runs").rglob("weights/best.pt"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if best_pts:
+        return best_pts[0].resolve()
+
+    return None
+
+
+def _extract_final_metrics(results) -> dict[str, float]:
+    """Extract a flat dict of final validation metrics from Ultralytics results.
+
+    Tries multiple access patterns to support different Ultralytics versions:
+    1. ``results.results_dict`` (preferred — flat dict with metric values)
+    2. ``results.metrics`` (Ultralytics namespace/object with ``.get()``)
+    3. ``results.metrics.results_dict`` (nested access)
+
+    Returns keys like ``val/mAP50``, ``val/mAP50-95`` etc.  Returns an empty
+    dict when no metrics can be extracted.
+    """
+    metrics: dict[str, float] = {}
+
+    # Collect raw metrics from whichever access pattern works
+    raw: dict = {}
+
+    # Pattern 1: results.results_dict (common in Ultralytics 8.x)
+    if hasattr(results, "results_dict") and results.results_dict:
+        raw = dict(results.results_dict)
+
+    # Pattern 2: results.metrics as dict-like
+    elif hasattr(results, "metrics"):
+        m = results.metrics
+        if hasattr(m, "get"):
+            # Try to get known keys
+            for k in ["mAP50(B)", "mAP50-95(B)", "precision(B)", "recall(B)",
+                       "metrics/mAP50(B)", "metrics/mAP50-95(B)",
+                       "metrics/precision(B)", "metrics/recall(B)"]:
+                v = m.get(k, None)
+                if v is not None:
+                    raw[k] = float(v)
+        # Pattern 3: results.metrics.results_dict
+        if not raw and hasattr(m, "results_dict") and m.results_dict:
+            raw = dict(m.results_dict)
+
+    # Map Ultralytics metric keys to our canonical names
+    key_map = {
+        "mAP50(B)": "val/mAP50",
+        "mAP50-95(B)": "val/mAP50-95",
+        "precision(B)": "val/precision",
+        "recall(B)": "val/recall",
+        "metrics/mAP50(B)": "val/mAP50",
+        "metrics/mAP50-95(B)": "val/mAP50-95",
+        "metrics/precision(B)": "val/precision",
+        "metrics/recall(B)": "val/recall",
+    }
+    for old_key, new_key in key_map.items():
+        val = raw.get(old_key, None)
+        if val is not None:
+            metrics[new_key] = float(val)
+
+    return metrics
+
+
+# ---------------------------------------------------------------------------
+# Training functions
+# ---------------------------------------------------------------------------
+
+
+def train_yolo(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
+    """Train an Ultralytics YOLO model (YOLO26, YOLOv8, YOLO11).
+
+    Returns
+    -------
+    results
+        The object returned by ``YOLO.train()`` (has ``.metrics`` and
+        sometimes ``.save_dir``).
+    best_path
+        Absolute ``Path`` to ``best.pt``, or ``None`` if not found.
+    """
+    weights_path = PROJECT_ROOT / "models" / f"{cfg.model.name}.pt"
+    if not weights_path.exists():
+        logger.warning(
+            "Pre-downloaded weights not found at %s — "
+            "Ultralytics will download them automatically (name=%s)",
+            weights_path,
+            cfg.model.name,
+        )
+        weights_str: str = cfg.model.name
+    else:
+        weights_str = str(weights_path)
+
+    logger.info("Loading YOLO model from: %s", weights_str)
+    model = YOLO(weights_str)
+    logger.info("Model loaded — task: %s, model: %s", model.task, cfg.model.name)
+
+    kwargs = _build_ultralytics_kwargs(cfg)
+    logger.debug("Ultralytics train kwargs: %s", kwargs)
+
+    # Register per-epoch MLflow callback
+    run_id = mlflow.active_run().info.run_id if mlflow.active_run() else None
+    if run_id:
+        model.add_callback("on_train_epoch_end", _make_epoch_callback(run_id))
+
+    results = model.train(**kwargs)
+    best_path = _find_best_model(results, cfg.experiment.name)
+
+    return results, best_path
+
+
+def train_non_yolo(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
+    """Train a non-Ultralytics model (Faster R-CNN, DETR).
+
+    .. note::
+       Not yet implemented.  Raises ``NotImplementedError`` with a clear
+       message.  This placeholder allows the ``train_model()`` factory to
+       fail gracefully for unsupported architectures.
+    """
+    raise NotImplementedError(
+        f"Non-YOLO training is not implemented for model architecture "
+        f"'{cfg.model.name}' ({cfg.model.get('variant', '?')}). "
+        "Only Ultralytics YOLO models are supported in this version. "
+        "See Task 8 for Faster R-CNN / DETR integration."
     )
 
-    # --- Summary ---
-    print(f"\n{'='*60}")
-    print(f"Training complete!")
-    print(f"Best model: {PROJECT}/{NAME}/weights/best.pt")
-    print(f"Results:    {PROJECT}/{NAME}/")
-    print(f"{'='*60}")
 
-    # Print final metrics
-    if hasattr(results, "metrics"):
-        m = results.metrics
-        print(f"\nFinal Validation Metrics:")
-        print(f"  mAP50:    {m.get('metrics/mAP50(B)', 'N/A')}")
-        print(f"  mAP50-95: {m.get('metrics/mAP50-95(B)', 'N/A')}")
-        print(f"  Precision: {m.get('metrics/precision(B)', 'N/A')}")
-        print(f"  Recall:   {m.get('metrics/recall(B)', 'N/A')}")
+def train_model(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
+    """Factory: dispatch to the correct training function based on model type.
 
+    Routing logic
+    -------------
+    * ``faster_rcnn``, ``detr`` → :func:`train_non_yolo` (raises NotImplementedError)
+    * Everything else (``yolo26*``, ``yolov8*``, ``yolo11*``) → :func:`train_yolo`
+    """
+    model_name: str = str(cfg.model.name)
+    if model_name in ("faster_rcnn", "detr"):
+        return train_non_yolo(cfg)
+    return train_yolo(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+
+
+@hydra.main(version_base=None, config_path="../configs", config_name="default")
+def main(cfg: DictConfig) -> None:
+    """Main training entrypoint — invoked by Hydra.
+
+    The ``@hydra.main`` decorator:
+    * Composes the config from ``configs/default.yaml`` + any overrides.
+    * Changes Hydra's output directory to ``outputs/{config_name}/``.
+    * Resolves ``${hydra:runtime.cwd}`` to the project root.
+    """
+    # --- Dry-run / info mode -------------------------------------------------
+    if cfg.get("info", False) or cfg.get("dry_run", False):
+        print(OmegaConf.to_yaml(cfg))
+        return
+
+    # --- Reproducibility -----------------------------------------------------
+    set_seeds(cfg.training.get("seed", 42))
+
+    # --- Device --------------------------------------------------------------
+    if torch.cuda.is_available():
+        device_count = torch.cuda.device_count()
+        device_name = torch.cuda.get_device_name(0)
+        logger.info("CUDA available — %d device(s). Using: %s", device_count, device_name)
+    else:
+        logger.warning("CUDA NOT available — training will fall back to CPU")
+        logger.warning(
+            "Expected CUDA 12.8 + RTX 5070. "
+            "Check driver and PyTorch-CUDA compatibility."
+        )
+
+    # --- Dataset check -------------------------------------------------------
+    if not DATA_YAML.exists():
+        logger.error("Dataset YAML not found: %s", DATA_YAML)
+        logger.error("Run this script from the project root directory.")
+        sys.exit(1)
+    logger.info("Dataset YAML: %s", DATA_YAML)
+
+    # --- Load augmentation config from YAML if using custom transforms ------
+    # (Ultralytics handles its own augmentation internally; no action needed.)
+
+    # --- MLflow initialisation -----------------------------------------------
+    run_id = init_mlflow(cfg)
+    logger.info("MLflow run started: %s", run_id)
+
+    # --- Train ---------------------------------------------------------------
+    final_metrics: dict[str, float] = {}
+    model_path_str: Optional[str] = None
+
+    try:
+        results, best_path = train_model(cfg)
+
+        final_metrics = _extract_final_metrics(results)
+        logger.info("Final validation metrics: %s", final_metrics)
+
+        if best_path:
+            model_path_str = str(best_path)
+            logger.info("Best model checkpoint: %s", model_path_str)
+        else:
+            logger.warning("Could not locate best.pt — model artifact not logged")
+
+    except Exception:
+        logger.exception("Training failed")
+        final_metrics["error"] = 1.0
+        raise
+
+    finally:
+        # Always finalise the MLflow run (log whatever metrics we have)
+        finish_mlflow(run_id, metrics=final_metrics, model_path=model_path_str)
+        logger.info("MLflow run finished: %s", run_id)
+
+    # --- Summary -------------------------------------------------------------
+    if final_metrics:
+        print(f"\n{'=' * 60}")
+        print("Training complete — final validation metrics:")
+        for key, value in final_metrics.items():
+            print(f"  {key:<20s}  {value:.4f}")
+        if model_path_str:
+            print(f"  Best model:           {model_path_str}")
+        print(f"{'=' * 60}\n")
+
+
+# ---------------------------------------------------------------------------
+# CLI entry
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Support --info / --dry-run flags for quick config inspection.
+    # Hydra's @hydra.main does not recognise bare flags, so we translate
+    # them into Hydra-compatible config overrides before calling main().
+    if "--info" in sys.argv:
+        sys.argv = [a for a in sys.argv if a != "--info"]
+        sys.argv.append("++info=true")
+    if "--dry-run" in sys.argv:
+        sys.argv = [a for a in sys.argv if a != "--dry-run"]
+        sys.argv.append("++dry_run=true")
+
     main()

@@ -1,0 +1,11 @@
+# Model configuration
+# Each experiment config overrides name, variant, and training.batch_size
+
+name: ???                  # must be specified by experiment config (yolo26n, yolo26s, ...)
+variant: ???               # nano, small, medium, large, xlarge
+task: detect
+pretrained: true
+weights: ${hydra:runtime.cwd}/models/${model.name}.pt
+backbone: null             # override for non-YOLO models (e.g., resnet50)
+num_classes: ${data.num_classes}
+img_size: ${data.image_size}

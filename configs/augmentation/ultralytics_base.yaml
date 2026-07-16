@@ -1,0 +1,29 @@
+# ── Ultralytics built-in augmentation ──────────────────────
+# These hyperparameters are passed to YOLO().train(…) or model.model.args
+# Ref: https://docs.ultralytics.com/modes/train/#augmentation-hyperparameters
+
+enabled: true
+mode: ultralytics
+
+ultralytics:
+  # ── Colour space ───────────────────────────────────────
+  hsv_h: 0.015                 # hue fraction (0–1)
+  hsv_s: 0.7                   # saturation fraction (0–1)
+  hsv_v: 0.4                   # value/brightness fraction (0–1)
+
+  # ── Geometric ──────────────────────────────────────────
+  degrees: 0.0                 # rotation (±deg); 0 = disabled
+  translate: 0.1               # translation fraction (0–1)
+  scale: 0.5                   # scaling fraction (±gain)
+  shear: 0.0                   # shear (±deg); 0 = disabled
+  fliplr: 0.5                  # horizontal flip probability
+
+  # ── Mosaic & mixing ────────────────────────────────────
+  mosaic: 1.0                  # mosaic probability (1.0 = always)
+  mixup: 0.0                   # mixup probability; 0 = disabled
+  copy_paste: 0.0              # copy-paste probability; 0 = disabled
+
+  # ── Epoch control ──────────────────────────────────────
+  close_mosaic: 10             # disable mosaic in last N epochs
+
+albumentations: []             # no external augmentations in base config

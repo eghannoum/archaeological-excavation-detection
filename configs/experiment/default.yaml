@@ -1,0 +1,10 @@
+# Experiment metadata (default -- MUST override via experiment=<name>)
+# Activatable via: python train.py experiment=yolo26n
+
+name: ???                    # must be specified
+description: null
+tags: []
+notes: null
+log_level: INFO
+log_frequency: 50            # log every N steps
+save_frequency: 10           # save checkpoint every N epochs

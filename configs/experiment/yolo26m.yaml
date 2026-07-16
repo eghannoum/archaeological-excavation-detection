@@ -1,0 +1,14 @@
+# @package _global_
+# ── YOLO26 medium ─────────────────────────────────────────
+# Batch size: 16 (fits 8 GB VRAM on RTX 5070 Laptop)
+
+experiment:
+  name: yolo26m
+  description: "YOLO26 medium — 42.2M params, primary baseline"
+
+model:
+  name: yolo26m
+  variant: medium
+
+training:
+  batch_size: 16

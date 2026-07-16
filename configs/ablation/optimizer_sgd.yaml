@@ -1,0 +1,13 @@
+# @package _global_
+# ── Ablation: SGD optimizer ───────────────────────────────
+# Comparison against default AdamW
+# Use: python train.py experiment=yolo26m ablation=optimizer_sgd
+
+training:
+  optimizer: SGD
+  lr: 0.01                     # higher LR typical for SGD
+  weight_decay: 0.0005
+  momentum: 0.937
+  scheduler:
+    name: cosine
+    warmup_epochs: 3

@@ -1,0 +1,8 @@
+# @package _global_
+# ── Ablation: heavy augmentation ──────────────────────────
+# Uses augmentations/heavy.yaml profile
+# Use: python train.py experiment=yolo26m ablation=aug_heavy
+
+defaults:
+  - override /augmentation: heavy
+  - _self_

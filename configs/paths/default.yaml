@@ -1,0 +1,12 @@
+# Centralized path configuration
+# All paths are relative to ${hydra:runtime.cwd} (the project root)
+# Use pathlib.Path.as_posix() in Python for Windows compatibility
+
+data_dir: ${hydra:runtime.cwd}/data
+output_dir: ${hydra:runtime.cwd}/outputs
+models_dir: ${hydra:runtime.cwd}/models
+mlruns_dir: ${hydra:runtime.cwd}/mlruns
+experiment_dir: ${hydra:runtime.cwd}/outputs/${experiment.name}
+log_dir: ${hydra:runtime.cwd}/logs
+evidence_dir: ${hydra:runtime.cwd}/evidence
+temp_dir: ${hydra:runtime.cwd}/.tmp

@@ -1,0 +1,14 @@
+# @package _global_
+# ── YOLO26 small ──────────────────────────────────────────
+# Batch size: 16 (fits 8 GB VRAM on RTX 5070 Laptop)
+
+experiment:
+  name: yolo26s
+  description: "YOLO26 small — 19.5M params, balanced speed/accuracy"
+
+model:
+  name: yolo26s
+  variant: small
+
+training:
+  batch_size: 16

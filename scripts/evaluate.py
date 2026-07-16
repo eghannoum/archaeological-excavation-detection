@@ -15,8 +15,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        default="runs/train/yolo26n-hole/weights/best.pt",
-        help="Path to trained model weights (default: runs/train/yolo26n-hole/weights/best.pt)",
+        default="runs/train/yolo26m-hole/weights/best.pt",
+        help="Path to trained model weights (default: runs/train/yolo26m-hole/weights/best.pt)",
     )
     parser.add_argument(
         "--data",
@@ -191,7 +191,7 @@ def main() -> None:
     sep = "─" * 45
     print()
     print("=" * 45)
-    print("  YOLO26n Hole Detection — Test Set Evaluation")
+    print("  YOLO26m Hole Detection — Test Set Evaluation")
     print("=" * 45)
     print(f"{'Metric':<20} {'Value':<10}")
     print(sep)

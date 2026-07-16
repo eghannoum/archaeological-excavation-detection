@@ -1,0 +1,14 @@
+# @package _global_
+# ── YOLO26 nano ───────────────────────────────────────────
+# Batch size: 16 (reduced from 32 — OOM at 32 with mosaic+640px training)
+
+experiment:
+  name: yolo26n
+  description: "YOLO26 nano — 5.3M params, fastest inference"
+
+model:
+  name: yolo26n
+  variant: nano
+
+training:
+  batch_size: 16

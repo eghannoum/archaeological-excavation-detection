@@ -1,0 +1,14 @@
+# Core ML framework
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+torchaudio==2.11.0+cu128
+
+# YOLO detection
+ultralytics==8.4.72
+
+# Augmentation
+albumentations==2.0.8
+
+# Experiment tracking (already installed)
+# mlflow==3.14.0
+# optuna==4.9.0

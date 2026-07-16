@@ -1,0 +1,14 @@
+# Cross-validation configuration
+# Stratified k-fold by parent scene to prevent spatial leakage
+
+n_folds: 3
+split_strategy: parent_scene  # group by parent_scene to avoid spatial leakage
+fold_column: parent_scene     # metadata column for grouping
+random_seed: 42
+shuffle: true
+save_fold_models: true
+fold_metrics:
+  - mAP50
+  - mAP50-95
+  - precision
+  - recall

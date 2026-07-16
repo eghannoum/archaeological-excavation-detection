@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="runs/train/yolo26n-hole/weights/best.pt",
+        default="runs/train/yolo26m-hole/weights/best.pt",
         help="Path to trained model weights",
     )
     parser.add_argument(

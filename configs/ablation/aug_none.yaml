@@ -1,0 +1,22 @@
+# @package _global_
+# ── Ablation: no augmentation ─────────────────────────────
+# Disables all data augmentation (Ultralytics + Albumentations)
+# Use: python train.py experiment=yolo26m ablation=aug_none
+
+augmentation:
+  enabled: false
+  mode: none
+  ultralytics:
+    hsv_h: 0.0
+    hsv_s: 0.0
+    hsv_v: 0.0
+    degrees: 0.0
+    translate: 0.0
+    scale: 0.0
+    shear: 0.0
+    fliplr: 0.0
+    mosaic: 0.0
+    mixup: 0.0
+    copy_paste: 0.0
+    close_mosaic: 0
+  albumentations: []
