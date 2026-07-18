@@ -126,6 +126,22 @@ def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
                 if k not in kwargs:
                     kwargs[k] = v
 
+        # -- Albumentations integration (light/heavy mode) --
+        mode = aug.get("mode", "ultralytics")
+        if mode in ("light", "heavy"):
+            try:
+                from scripts.augmentation import get_pipeline
+                pipeline = get_pipeline(mode)
+                if pipeline is not None:
+                    kwargs["augmentations"] = pipeline.transforms
+                    logger.info(
+                        "Albumentations pipeline loaded (mode=%s, %d transforms)",
+                        mode,
+                        len(pipeline.transforms),
+                    )
+            except Exception as exc:
+                logger.warning("Could not load Albumentations pipeline: %s", exc)
+
     # Remove None values to avoid confusing Ultralytics
     return {k: v for k, v in kwargs.items() if v is not None}
 
