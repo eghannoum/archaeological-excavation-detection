@@ -1,4 +1,6 @@
 # @package _global_
+# NOTE: Reference-only documentation for scripts/train_detr.py (argparse-based
+# trainer). Not consumed by scripts/train.py — DETR runs via the standalone script.
 # ── DETR (Facebook Research) ──────────────────────────────
 # Batch size: 4 (fits 8 GB VRAM on RTX 5070 Laptop)
 # NOTE: Downloads model at runtime via:

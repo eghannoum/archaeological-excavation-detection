@@ -2,7 +2,6 @@
 
 enabled: false                # set true to run HPO instead of single train
 n_trials: 50
-timeout: null                 # seconds; null = unlimited
 direction: maximize           # maximize | minimize
 target_metric: val/mAP50
 
@@ -17,8 +16,6 @@ pruner:
   n_startup_trials: 5
   n_warmup_steps: 10
   interval_steps: 1
-  min_resource: 1
-  max_resource: ${training.epochs}
 
 study_name: yolo26m-hpo
 storage: null                  # null = in-memory; or sqlite:///path
@@ -27,7 +24,7 @@ load_if_exists: false
 trial_epochs: 15                  # reduced from 30 per full training — speeds up HPO
 
 # Search space defined in Python code (scripts/hpo.py SEARCH_SPACE).
-# Batch size is FIXED at 16 per GPU benchmark — NOT searched.
+# Batch size is FIXED at 8 per GPU benchmark — NOT searched.
 # Reference: 12 hyper-parameters
 #   lr:            log-uniform [1e-4, 1e-2]
 #   momentum:      uniform     [0.8, 0.95]

@@ -1,8 +1,8 @@
 # Model configuration
-# Each experiment config overrides name, variant, and training.batch_size
+# Each experiment config overrides name and variant (e.g. experiment=yolo26m)
 
-name: ???                  # must be specified by experiment config (yolo26n, yolo26s, ...)
-variant: ???               # nano, small, medium, large, xlarge
+name: yolo26n                # default; overridden via experiment=<name>
+variant: nano                # default; overridden via experiment=<name>
 task: detect
 pretrained: true
 weights: ${hydra:runtime.cwd}/models/${model.name}.pt

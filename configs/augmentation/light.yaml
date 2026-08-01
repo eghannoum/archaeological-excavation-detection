@@ -1,5 +1,7 @@
-# ── Light Albumentations augmentation ─────────────────────
-# Minimal external augmentations on top of Ultralytics base
+# Light augmentation mode.
+# Mode settings only - the actual Albumentations transform
+# lists are defined in Python in scripts/augmentation.py.
+# The ultralytics block configures native YOLO augmentations.
 
 enabled: true
 mode: light
@@ -17,26 +19,3 @@ ultralytics:
   mixup: 0.0
   copy_paste: 0.0
   close_mosaic: 10
-
-albumentations:
-  - transform: HorizontalFlip
-    params:
-      p: 0.5
-
-  - transform: RandomBrightnessContrast
-    params:
-      p: 0.3
-      brightness_limit: 0.2
-      contrast_limit: 0.2
-
-  - transform: HueSaturationValue
-    params:
-      p: 0.2
-      hue_shift_limit: 20
-      sat_shift_limit: 30
-      val_shift_limit: 20
-
-  - transform: Blur
-    params:
-      p: 0.2
-      blur_limit: 3

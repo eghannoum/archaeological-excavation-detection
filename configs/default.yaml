@@ -5,9 +5,7 @@ defaults:
   - data: default
   - model: default
   - training: default
-  - evaluation: default
   - experiment: default
-  - paths: default
   - augmentation: ultralytics_base
   - cv: default
   - hpo: default

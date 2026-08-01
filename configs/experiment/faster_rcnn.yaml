@@ -1,4 +1,6 @@
 # @package _global_
+# NOTE: Reference-only documentation for scripts/train_faster_rcnn.py (argparse-based
+# trainer). Not consumed by scripts/train.py — Faster R-CNN runs via the standalone script.
 # ── Faster R-CNN (torchvision) ────────────────────────────
 # Batch size: 8 (fits 8 GB VRAM on RTX 5070 Laptop)
 # NOTE: Uses torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)

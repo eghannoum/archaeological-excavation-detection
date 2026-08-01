@@ -1,7 +1,7 @@
-# Experiment metadata (default -- MUST override via experiment=<name>)
+# Experiment metadata (default — override via experiment=<name>)
 # Activatable via: python train.py experiment=yolo26n
 
-name: ???                    # must be specified
+name: yolo26n                # default experiment; override via experiment=<name>
 description: null
 tags: []
 notes: null
