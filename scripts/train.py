@@ -7,7 +7,7 @@ Usage
     python scripts/train.py experiment=yolo26n ++info=true  # same dry-run via Hydra
     python scripts/train.py experiment=yolo26n training.epochs=1   # 1-epoch smoke test
     python scripts/train.py experiment=yolo26n augmentation=heavy
-    python scripts/train.py experiment=yolo26m ablation=imgsz320 optimizer=sgd
+    python scripts/train.py experiment=yolo26m ablation=optimizer_sgd
 
 Integrates Hydra config (configs/default.yaml) + MLflow tracking (scripts.mlflow_utils).
 """
@@ -15,10 +15,11 @@ Integrates Hydra config (configs/default.yaml) + MLflow tracking (scripts.mlflow
 from __future__ import annotations
 
 import logging
+import random
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any
 
 # Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
 # regardless of whether the user runs ``python scripts/train.py`` or
@@ -34,7 +35,7 @@ import torch  # noqa: E402
 from omegaconf import DictConfig, OmegaConf  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 
-from scripts.mlflow_utils import init_mlflow, finish_mlflow  # noqa: E402
+from scripts.mlflow_utils import finish_mlflow, init_mlflow  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -53,11 +54,24 @@ logger = logging.getLogger(__name__)
 
 
 def set_seeds(seed: int) -> None:
-    """Set random seeds for reproducibility across torch and numpy."""
+    """Set random seeds for reproducibility across torch, numpy, and Python's ``random``."""
+    random.seed(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def _resolve_device(device: Any) -> Any:
+    """Resolve the ``training.device`` config value into an Ultralytics device.
+
+    ``auto`` uses the first CUDA device when available, otherwise CPU.
+    Explicit values (``cuda:0``, ``cuda:1``, ``cpu``) pass through unchanged.
+    """
+    device_str = str(device).strip().lower()
+    if device_str == "auto":
+        return 0 if torch.cuda.is_available() else "cpu"
+    return device_str
 
 
 def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
@@ -90,7 +104,7 @@ def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
         "batch": cfg.training.batch_size,
         "imgsz": cfg.data.image_size,
         "workers": cfg.training.workers,
-        "device": 0,
+        "device": _resolve_device(cfg.training.get("device", "auto")),
         "pretrained": cfg.model.pretrained,
         "optimizer": cfg.training.optimizer,
         "lr0": cfg.training.lr,
@@ -112,11 +126,6 @@ def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
         kwargs["patience"] = es.patience
         # Ultralytics uses 'patience' for early stopping
 
-    # NOTE: Ultralytics does not expose a native gradient-clip parameter.
-    # The ``training.gradient_clip`` value from config is handled internally
-    # by PyTorch's optimizer (via ``torch.nn.utils.clip_grad_norm_``) when
-    # implementing custom training loops, which is not applicable here.
-
     # -- Ultralytics augmentation overrides --
     aug = cfg.get("augmentation", None)
     if aug and aug.get("enabled", False):
@@ -131,6 +140,7 @@ def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
         if mode in ("light", "heavy"):
             try:
                 from scripts.augmentation import get_pipeline
+
                 pipeline = get_pipeline(mode)
                 if pipeline is not None:
                     kwargs["augmentations"] = pipeline.transforms
@@ -164,21 +174,19 @@ def _make_epoch_callback(run_id: str):
     ``trainer.epoch`` (0-indexed) and ``trainer.metrics`` are used for the
     MLflow step and metric values respectively.
     """
+
     def _on_train_epoch_end(trainer) -> None:
         if not hasattr(trainer, "metrics") or not trainer.metrics:
             return
         step = getattr(trainer, "epoch", None)
         # Sanitize metric names for MLflow compatibility
-        sanitized = {
-            _sanitize_metric_name(k): v
-            for k, v in trainer.metrics.items()
-        }
+        sanitized = {_sanitize_metric_name(k): v for k, v in trainer.metrics.items()}
         mlflow.log_metrics(sanitized, step=step)
 
     return _on_train_epoch_end
 
 
-def _find_best_model(results, experiment_name: str) -> Optional[Path]:
+def _find_best_model(results, experiment_name: str) -> Path | None:
     """Locate the best model checkpoint produced by an Ultralytics training run.
 
     Search order:
@@ -240,9 +248,16 @@ def _extract_final_metrics(results) -> dict[str, float]:
         m = results.metrics
         if hasattr(m, "get"):
             # Try to get known keys
-            for k in ["mAP50(B)", "mAP50-95(B)", "precision(B)", "recall(B)",
-                       "metrics/mAP50(B)", "metrics/mAP50-95(B)",
-                       "metrics/precision(B)", "metrics/recall(B)"]:
+            for k in [
+                "mAP50(B)",
+                "mAP50-95(B)",
+                "precision(B)",
+                "recall(B)",
+                "metrics/mAP50(B)",
+                "metrics/mAP50-95(B)",
+                "metrics/precision(B)",
+                "metrics/recall(B)",
+            ]:
                 v = m.get(k, None)
                 if v is not None:
                     raw[k] = float(v)
@@ -262,7 +277,7 @@ def _extract_final_metrics(results) -> dict[str, float]:
         "metrics/recall(B)": "val/recall",
     }
     for old_key, new_key in key_map.items():
-        val = raw.get(old_key, None)
+        val = raw.get(old_key)
         if val is not None:
             metrics[new_key] = float(val)
 
@@ -274,7 +289,7 @@ def _extract_final_metrics(results) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def train_yolo(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
+def train_yolo(cfg: DictConfig) -> tuple[Any, Path | None]:
     """Train an Ultralytics YOLO model (YOLO26, YOLOv8, YOLO11).
 
     Returns
@@ -315,33 +330,26 @@ def train_yolo(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
     return results, best_path
 
 
-def train_non_yolo(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
-    """Train a non-Ultralytics model (Faster R-CNN, DETR).
-
-    .. note::
-       Not yet implemented.  Raises ``NotImplementedError`` with a clear
-       message.  This placeholder allows the ``train_model()`` factory to
-       fail gracefully for unsupported architectures.
-    """
-    raise NotImplementedError(
-        f"Non-YOLO training is not implemented for model architecture "
-        f"'{cfg.model.name}' ({cfg.model.get('variant', '?')}). "
-        "Only Ultralytics YOLO models are supported in this version. "
-        "See Task 8 for Faster R-CNN / DETR integration."
-    )
-
-
-def train_model(cfg: DictConfig) -> Tuple[Any, Optional[Path]]:
+def train_model(cfg: DictConfig) -> tuple[Any, Path | None]:
     """Factory: dispatch to the correct training function based on model type.
 
     Routing logic
     -------------
-    * ``faster_rcnn``, ``detr`` → :func:`train_non_yolo` (raises NotImplementedError)
+    * ``faster_rcnn``, ``detr`` → not trainable here; a clear message directs
+      the user to the dedicated standalone trainers.
     * Everything else (``yolo26*``, ``yolov8*``, ``yolo11*``) → :func:`train_yolo`
     """
     model_name: str = str(cfg.model.name)
     if model_name in ("faster_rcnn", "detr"):
-        return train_non_yolo(cfg)
+        trainer = "train_faster_rcnn.py" if model_name == "faster_rcnn" else "train_detr.py"
+        logger.error(
+            "%s is not trained by this script — run scripts/%s instead "
+            "(reference config: experiment=%s)",
+            model_name,
+            trainer,
+            model_name,
+        )
+        raise SystemExit(1)
     return train_yolo(cfg)
 
 
@@ -375,8 +383,7 @@ def main(cfg: DictConfig) -> None:
     else:
         logger.warning("CUDA NOT available — training will fall back to CPU")
         logger.warning(
-            "Expected CUDA 12.8 + RTX 5070. "
-            "Check driver and PyTorch-CUDA compatibility."
+            "Expected CUDA 12.8 + RTX 5070. " "Check driver and PyTorch-CUDA compatibility."
         )
 
     # --- Dataset check -------------------------------------------------------
@@ -395,7 +402,7 @@ def main(cfg: DictConfig) -> None:
 
     # --- Train ---------------------------------------------------------------
     final_metrics: dict[str, float] = {}
-    model_path_str: Optional[str] = None
+    model_path_str: str | None = None
 
     try:
         results, best_path = train_model(cfg)
@@ -421,13 +428,11 @@ def main(cfg: DictConfig) -> None:
 
     # --- Summary -------------------------------------------------------------
     if final_metrics:
-        print(f"\n{'=' * 60}")
-        print("Training complete — final validation metrics:")
+        logger.info("Training complete — final validation metrics:")
         for key, value in final_metrics.items():
-            print(f"  {key:<20s}  {value:.4f}")
+            logger.info("  %-20s  %.4f", key, value)
         if model_path_str:
-            print(f"  Best model:           {model_path_str}")
-        print(f"{'=' * 60}\n")
+            logger.info("  Best model:           %s", model_path_str)
 
 
 # ---------------------------------------------------------------------------

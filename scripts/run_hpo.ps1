@@ -2,7 +2,7 @@ param(
     [int]$NTrials = 50
 )
 
-$workDir = "C:\Users\eghan\Desktop\self study courses\Projects\STI-Unauthorized-Archaeological-Excavations"
+$workDir = Split-Path -Parent $PSScriptRoot
 $logFile = Join-Path $workDir ".omo/logs/hpo-run.log"
 $venvPython = Join-Path $workDir ".venv/Scripts/python.exe"
 $hpoScript = Join-Path $workDir "scripts/hpo.py"

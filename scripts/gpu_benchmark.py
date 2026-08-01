@@ -20,25 +20,24 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 from ultralytics import YOLO
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
-VRAM_TOTAL_MIB = 8151       # RTX 5070 Laptop GPU total
-VRAM_TARGET_MIB = 7500      # leave ~650 MiB headroom
+VRAM_TOTAL_MIB = 8151  # RTX 5070 Laptop GPU total
+VRAM_TARGET_MIB = 7500  # leave ~650 MiB headroom
 IMAGE_SIZE = 640
 WARMUP_ITERS = 100
 TIMED_ITERS = 100
 
 VARIANT_INFO = {
     "yolo26n": {"batch_sizes": [16, 32, 64], "weight": "yolo26n.pt"},
-    "yolo26s": {"batch_sizes": [16, 32],      "weight": "yolo26s.pt"},
-    "yolo26m": {"batch_sizes": [8, 16],        "weight": "yolo26m.pt"},
-    "yolo26l": {"batch_sizes": [4, 8],         "weight": "yolo26l.pt"},
-    "yolo26x": {"batch_sizes": [2, 4],         "weight": "yolo26x.pt"},
+    "yolo26s": {"batch_sizes": [16, 32], "weight": "yolo26s.pt"},
+    "yolo26m": {"batch_sizes": [8, 16], "weight": "yolo26m.pt"},
+    "yolo26l": {"batch_sizes": [4, 8], "weight": "yolo26l.pt"},
+    "yolo26x": {"batch_sizes": [2, 4], "weight": "yolo26x.pt"},
 }
 
 
@@ -46,22 +45,31 @@ VARIANT_INFO = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="GPU Benchmark + VRAM Profiling for YOLO26"
-    )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--quick", action="store_true",
-                      help="Reduced benchmark (2 variants, 1 batch size each)")
-    mode.add_argument("--vram-only", action="store_true",
-                      help="Only profile VRAM usage (skip throughput)")
-    mode.add_argument("--full", action="store_true",
-                      help="Complete benchmark (all variants, multiple batch sizes)")
 
-    parser.add_argument("--model", type=str, default=None,
-                        help="Specific model to benchmark (default: all)")
-    parser.add_argument("--batch-sizes", type=str, default=None,
-                        help="Custom batch sizes, comma-separated (overrides defaults)")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="GPU Benchmark + VRAM Profiling for YOLO26")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--quick", action="store_true", help="Reduced benchmark (2 variants, 1 batch size each)"
+    )
+    mode.add_argument(
+        "--vram-only", action="store_true", help="Only profile VRAM usage (skip throughput)"
+    )
+    mode.add_argument(
+        "--full",
+        action="store_true",
+        help="Complete benchmark (all variants, multiple batch sizes)",
+    )
+
+    parser.add_argument(
+        "--model", type=str, default=None, help="Specific model to benchmark (default: all)"
+    )
+    parser.add_argument(
+        "--batch-sizes",
+        type=str,
+        default=None,
+        help="Custom batch sizes, comma-separated (overrides defaults)",
+    )
     return parser.parse_args()
 
 
@@ -106,6 +114,7 @@ def get_device() -> torch.device:
 # Benchmark 1: PyTorch Matmul (matrix size sweep)
 # ---------------------------------------------------------------------------
 
+
 def benchmark_matmul(device: torch.device) -> list[dict]:
     """Sweep matrix sizes 256→4096, measure TFLOPS."""
     print("\n" + "=" * 60)
@@ -121,7 +130,7 @@ def benchmark_matmul(device: torch.device) -> list[dict]:
 
         # Warmup
         for _ in range(30):
-            c = a @ b
+            _ = a @ b
         torch.cuda.synchronize()
 
         # Timed
@@ -130,21 +139,23 @@ def benchmark_matmul(device: torch.device) -> list[dict]:
 
         start_event.record()
         for _ in range(100):
-            c = a @ b
+            _ = a @ b
         end_event.record()
         torch.cuda.synchronize()
 
         elapsed_ms = start_event.elapsed_time(end_event) / 100.0  # per iteration
 
         # FLOPs for square matmul: 2 * N^3
-        flops = 2 * sz ** 3
+        flops = 2 * sz**3
         tflops = flops / (elapsed_ms / 1000.0) / 1e12
 
-        results.append({
-            "size": sz,
-            "elapsed_ms": elapsed_ms,
-            "tflops": tflops,
-        })
+        results.append(
+            {
+                "size": sz,
+                "elapsed_ms": elapsed_ms,
+                "tflops": tflops,
+            }
+        )
         print(f"  {sz:5d}×{sz:<5d}  {elapsed_ms:.3f} ms  {tflops:.2f} TFLOPS")
 
     return results
@@ -153,6 +164,7 @@ def benchmark_matmul(device: torch.device) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Benchmark 2: YOLO26 inference throughput + VRAM
 # ---------------------------------------------------------------------------
+
 
 def benchmark_yolo_variant(
     variant: str,
@@ -179,7 +191,7 @@ def benchmark_yolo_variant(
     warmup_tensor = torch.randn(1, 3, IMAGE_SIZE, IMAGE_SIZE).to(device) / 255.0
     _ = model(warmup_tensor, verbose=False)
     torch.cuda.synchronize()
-    print(f"  Model loaded and warmed up.")
+    print("  Model loaded and warmed up.")
 
     results = []
     for batch_size in batch_sizes:
@@ -211,15 +223,17 @@ def benchmark_yolo_variant(
         fits = peak_vram <= VRAM_TARGET_MIB
 
         if vram_only:
-            results.append({
-                "variant": variant,
-                "batch_size": batch_size,
-                "peak_vram_mib": peak_vram,
-                "current_vram_mib": current_vram,
-                "fits_in_target": fits,
-                "throughput_img_per_sec": None,
-                "latency_ms": None,
-            })
+            results.append(
+                {
+                    "variant": variant,
+                    "batch_size": batch_size,
+                    "peak_vram_mib": peak_vram,
+                    "current_vram_mib": current_vram,
+                    "fits_in_target": fits,
+                    "throughput_img_per_sec": None,
+                    "latency_ms": None,
+                }
+            )
             # Cleanup before next batch
             del dummy, dummy_norm
             torch.cuda.empty_cache()
@@ -229,16 +243,20 @@ def benchmark_yolo_variant(
         # Throughput profiling (skip if VRAM already too high)
         # ------------------------------------------------------------------
         if not fits:
-            print(f"    SKIP throughput: peak VRAM {peak_vram:.0f} MiB > {VRAM_TARGET_MIB} target (max safe)")
-            results.append({
-                "variant": variant,
-                "batch_size": batch_size,
-                "peak_vram_mib": peak_vram,
-                "current_vram_mib": current_vram,
-                "fits_in_target": fits,
-                "throughput_img_per_sec": None,
-                "latency_ms": None,
-            })
+            print(
+                f"    SKIP throughput: peak VRAM {peak_vram:.0f} MiB > {VRAM_TARGET_MIB} target (max safe)"
+            )
+            results.append(
+                {
+                    "variant": variant,
+                    "batch_size": batch_size,
+                    "peak_vram_mib": peak_vram,
+                    "current_vram_mib": current_vram,
+                    "fits_in_target": fits,
+                    "throughput_img_per_sec": None,
+                    "latency_ms": None,
+                }
+            )
             # Cleanup before next batch
             del dummy, dummy_norm
             torch.cuda.empty_cache()
@@ -270,15 +288,17 @@ def benchmark_yolo_variant(
         print(f"    Throughput:  {throughput:.1f} img/s")
         print(f"    Peak VRAM (post-throughput): {peak_vram_after:.0f} MiB")
 
-        results.append({
-            "variant": variant,
-            "batch_size": batch_size,
-            "peak_vram_mib": peak_vram_after,
-            "current_vram_mib": torch.cuda.memory_allocated(device) / 1024**2,
-            "fits_in_target": peak_vram_after <= VRAM_TARGET_MIB,
-            "throughput_img_per_sec": throughput,
-            "latency_ms": avg_ms,
-        })
+        results.append(
+            {
+                "variant": variant,
+                "batch_size": batch_size,
+                "peak_vram_mib": peak_vram_after,
+                "current_vram_mib": torch.cuda.memory_allocated(device) / 1024**2,
+                "fits_in_target": peak_vram_after <= VRAM_TARGET_MIB,
+                "throughput_img_per_sec": throughput,
+                "latency_ms": avg_ms,
+            }
+        )
 
         # Cleanup before next batch
         del dummy, dummy_norm
@@ -294,6 +314,7 @@ def benchmark_yolo_variant(
 # ---------------------------------------------------------------------------
 # Print helpers
 # ---------------------------------------------------------------------------
+
 
 def print_matmul_table(results: list[dict]) -> str:
     lines = [
@@ -340,14 +361,18 @@ def print_optimal_batch_table(results: list[dict]) -> str:
         candidates = [r for r in by_variant[var] if r["fits_in_target"]]
         if candidates:
             best = candidates[-1]  # largest batch that fits
-            tput = f"{best['throughput_img_per_sec']:.1f}" if best["throughput_img_per_sec"] else "—"
-            lines.append(
-                f"| {var} | {best['batch_size']} | {best['peak_vram_mib']:.0f} | {tput} |"
+            tput = (
+                f"{best['throughput_img_per_sec']:.1f}" if best["throughput_img_per_sec"] else "—"
             )
+            lines.append(f"| {var} | {best['batch_size']} | {best['peak_vram_mib']:.0f} | {tput} |")
         else:
             # Report smallest batch even if it doesn't fit
             smallest = by_variant[var][0]
-            tput = f"{smallest['throughput_img_per_sec']:.1f}" if smallest["throughput_img_per_sec"] else "—"
+            tput = (
+                f"{smallest['throughput_img_per_sec']:.1f}"
+                if smallest["throughput_img_per_sec"]
+                else "—"
+            )
             lines.append(
                 f"| {var} | {smallest['batch_size']} (⚠ exceeds target) | {smallest['peak_vram_mib']:.0f} | {tput} |"
             )
@@ -357,6 +382,7 @@ def print_optimal_batch_table(results: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     args = parse_args()
@@ -369,15 +395,14 @@ def main() -> None:
 
     variants = resolve_variants(args)
     print(f"\nVariants to benchmark: {[v[0] for v in variants]}")
-    print(f"VRAM target: {VRAM_TARGET_MIB} MiB (leaving {VRAM_TOTAL_MIB - VRAM_TARGET_MIB} MiB headroom)")
+    print(
+        f"VRAM target: {VRAM_TARGET_MIB} MiB (leaving {VRAM_TOTAL_MIB - VRAM_TARGET_MIB} MiB headroom)"
+    )
 
     all_yolo_results: list[dict] = []
 
     # Benchmark 1: Matmul
-    if not args.vram_only:
-        matmul_results = benchmark_matmul(device)
-    else:
-        matmul_results = []
+    matmul_results = benchmark_matmul(device) if not args.vram_only else []
 
     # Benchmark 2: YOLO variants
     for variant, batch_sizes in variants:
@@ -450,15 +475,17 @@ def main() -> None:
         )
 
     torch.cuda.reset_peak_memory_stats()
-    vram_lines.extend([
-        "",
-        "### WDDM Mode Notes",
-        "",
-        "- This GPU runs in WDDM mode (not TCC).",
-        "- WDDM adds 5–15% GPU kernel launch overhead vs Linux TCC.",
-        "- VRAM readings may fluctuate due to WDDM memory manager.",
-        "- Windows GD paging can cause VRAM values to appear ~200-500 MiB higher.",
-    ])
+    vram_lines.extend(
+        [
+            "",
+            "### WDDM Mode Notes",
+            "",
+            "- This GPU runs in WDDM mode (not TCC).",
+            "- WDDM adds 5–15% GPU kernel launch overhead vs Linux TCC.",
+            "- VRAM readings may fluctuate due to WDDM memory manager.",
+            "- Windows GD paging can cause VRAM values to appear ~200-500 MiB higher.",
+        ]
+    )
 
     vram_path = evidence_dir / "task-7-vram.txt"
     vram_path.write_text("\n".join(vram_lines), encoding="utf-8")

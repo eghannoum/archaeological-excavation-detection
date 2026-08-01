@@ -20,7 +20,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import mlflow
 import numpy as np
@@ -40,12 +40,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.mlflow_utils import (
+from scripts.mlflow_utils import (  # noqa: E402  # intentional: import after sys.path setup
     TRACKING_URI,
-    finish_mlflow,
-    init_experiment,
-    log_config,
-    log_metrics,
 )
 
 # ---------------------------------------------------------------------------
@@ -107,21 +103,16 @@ class YOLODetectionDataset(Dataset):
     COCO format: x1 y1 x2 y2 (pixel coordinates)
     """
 
-    def __init__(self, image_paths: List[Path], image_size: int = 640):
+    def __init__(self, image_paths: list[Path], image_size: int = 640):
         self.image_paths = image_paths
         self.image_size = image_size
 
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         img_path = self.image_paths[idx]
-        label_path = (
-            DATASET_DIR
-            / "labels"
-            / img_path.parent.name
-            / (img_path.stem + ".txt")
-        )
+        label_path = DATASET_DIR / "labels" / img_path.parent.name / (img_path.stem + ".txt")
 
         # Load image
         img = Image.open(img_path).convert("RGB")
@@ -138,13 +129,18 @@ class YOLODetectionDataset(Dataset):
         boxes = []
         labels = []
         if label_path.exists():
-            with open(label_path, "r") as f:
+            with open(label_path) as f:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) < 5:
                         continue
                     class_id = int(parts[0])
-                    cx, cy, w, h = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
+                    cx, cy, w, h = (
+                        float(parts[1]),
+                        float(parts[2]),
+                        float(parts[3]),
+                        float(parts[4]),
+                    )
 
                     # Convert normalized YOLO [cx,cy,w,h] to pixel [x1,y1,x2,y2]
                     x1 = (cx - w / 2) * orig_w * scale_x
@@ -163,7 +159,9 @@ class YOLODetectionDataset(Dataset):
                         continue
 
                     boxes.append([x1, y1, x2, y2])
-                    labels.append(class_id + 1)  # +1: Faster R-CNN uses 1-indexed labels (0 = background)
+                    labels.append(
+                        class_id + 1
+                    )  # +1: Faster R-CNN uses 1-indexed labels (0 = background)
 
         # Convert to tensors
         if boxes:
@@ -182,7 +180,7 @@ class YOLODetectionDataset(Dataset):
 
 def collate_fn(batch):
     """Custom collate for Faster R-CNN (expects list of images and targets)."""
-    return tuple(zip(*batch))
+    return tuple(zip(*batch, strict=False))
 
 
 # ---------------------------------------------------------------------------
@@ -196,11 +194,15 @@ def create_model(num_classes: int = 1) -> torchvision.models.detection.FasterRCN
     Replaces the box predictor head to support ``num_classes`` (excluding
     background, which is class 0).
     """
-    model = fasterrcnn_resnet50_fpn(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
+    model = fasterrcnn_resnet50_fpn(
+        weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+    )
 
     # Replace box predictor for custom number of classes
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes + 1)  # +1 for background
+    model.roi_heads.box_predictor = FastRCNNPredictor(
+        in_features, num_classes + 1
+    )  # +1 for background
 
     return model
 
@@ -211,8 +213,8 @@ def create_model(num_classes: int = 1) -> torchvision.models.detection.FasterRCN
 
 
 def compute_map50(
-    all_preds: List[Dict[str, torch.Tensor]],
-    all_targets: List[Dict[str, torch.Tensor]],
+    all_preds: list[dict[str, torch.Tensor]],
+    all_targets: list[dict[str, torch.Tensor]],
     iou_threshold: float = 0.5,
     score_threshold: float = 0.05,
 ) -> float:
@@ -225,7 +227,7 @@ def compute_map50(
     """
     aps = []
 
-    for pred, target in zip(all_preds, all_targets):
+    for pred, target in zip(all_preds, all_targets, strict=False):
         gt_boxes = target["boxes"]
         gt_labels = target["labels"]
         n_gt = len(gt_boxes)
@@ -257,7 +259,7 @@ def compute_map50(
         # Match predictions to GT
         matched_gt = set()
         tp = 0
-        for pred_box, pred_label in zip(pred_boxes, pred_labels):
+        for pred_box, pred_label in zip(pred_boxes, pred_labels, strict=False):
             best_iou = 0.0
             best_gt_idx = -1
             for gt_idx in range(n_gt):
@@ -274,7 +276,6 @@ def compute_map50(
                 matched_gt.add(best_gt_idx)
 
         precision = tp / len(pred_boxes) if len(pred_boxes) > 0 else 0.0
-        recall = tp / n_gt if n_gt > 0 else 0.0
         # Simplified AP: use precision at max recall achieved
         ap = precision  # Conservative: precision as proxy for AP
         aps.append(ap)
@@ -287,18 +288,18 @@ def compute_map50(
 # ---------------------------------------------------------------------------
 
 
-def get_all_images() -> List[Path]:
+def get_all_images() -> list[Path]:
     """Return all image paths in both train and val directories."""
-    images: List[Path] = []
+    images: list[Path] = []
     for d in [IMAGES_TRAIN, IMAGES_VAL]:
         if d.exists():
             images.extend(sorted(d.iterdir()))
     return images
 
 
-def group_by_parent_scene(image_paths: List[Path]) -> Dict[str, List[Path]]:
+def group_by_parent_scene(image_paths: list[Path]) -> dict[str, list[Path]]:
     """Group image paths by parent-scene identifier."""
-    groups: Dict[str, List[Path]] = {}
+    groups: dict[str, list[Path]] = {}
     for img_path in image_paths:
         scene = extract_parent_scene(img_path.name)
         groups.setdefault(scene, []).append(img_path)
@@ -306,16 +307,16 @@ def group_by_parent_scene(image_paths: List[Path]) -> Dict[str, List[Path]]:
 
 
 def create_fold_splits(
-    scene_groups: Dict[str, List[Path]],
+    scene_groups: dict[str, list[Path]],
     n_folds: int = 3,
     seed: int = 42,
-) -> List[Tuple[List[Path], List[Path]]]:
+) -> list[tuple[list[Path], list[Path]]]:
     """Split parent-scene groups into n_folds train/val folds."""
     scenes = list(scene_groups.keys())
     rng = np.random.default_rng(seed)
     rng.shuffle(scenes)
 
-    fold_scenes: List[List[str]] = [[] for _ in range(n_folds)]
+    fold_scenes: list[list[str]] = [[] for _ in range(n_folds)]
     for i, scene in enumerate(scenes):
         fold_scenes[i % n_folds].append(scene)
 
@@ -347,8 +348,8 @@ def create_fold_splits(
 
 def train_one_fold(
     fold_idx: int,
-    train_paths: List[Path],
-    val_paths: List[Path],
+    train_paths: list[Path],
+    val_paths: list[Path],
     epochs: int = 100,
     batch_size: int = 4,
     lr: float = 0.005,
@@ -361,7 +362,7 @@ def train_one_fold(
     num_classes: int = 1,
     seed: int = 42,
     use_mlflow: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Train Faster R-CNN for one fold with early stopping.
 
     Returns
@@ -373,7 +374,12 @@ def train_one_fold(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(
         "Fold %d: device=%s, train=%d, val=%d, batch_size=%d, epochs=%d",
-        fold_idx, device, len(train_paths), len(val_paths), batch_size, epochs,
+        fold_idx,
+        device,
+        len(train_paths),
+        len(val_paths),
+        batch_size,
+        epochs,
     )
 
     # Datasets
@@ -470,7 +476,13 @@ def train_one_fold(
         current_lr = optimizer.param_groups[0]["lr"]
         logger.info(
             "Fold %d | Epoch %d/%d | loss=%.4f | mAP50=%.4f | lr=%.6f | time=%.1fs",
-            fold_idx, epoch + 1, epochs, avg_train_loss, map50, current_lr, epoch_time,
+            fold_idx,
+            epoch + 1,
+            epochs,
+            avg_train_loss,
+            map50,
+            current_lr,
+            epoch_time,
         )
 
         # MLflow per-epoch logging
@@ -490,7 +502,9 @@ def train_one_fold(
             best_epoch = epoch + 1
             epochs_without_improvement = 0
             # Save best model
-            best_model_path = PROJECT_ROOT / "experiments" / "faster_rcnn" / f"fold_{fold_idx}_best.pt"
+            best_model_path = (
+                PROJECT_ROOT / "experiments" / "faster_rcnn" / f"fold_{fold_idx}_best.pt"
+            )
             best_model_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(model.state_dict(), best_model_path)
         else:
@@ -501,7 +515,10 @@ def train_one_fold(
         if epochs_without_improvement >= patience:
             logger.info(
                 "Fold %d: Early stopping triggered at epoch %d (best=%d, patience=%d)",
-                fold_idx, epoch + 1, best_epoch, patience,
+                fold_idx,
+                epoch + 1,
+                best_epoch,
+                patience,
             )
             break
 
@@ -525,10 +542,14 @@ def train_one_fold(
             for target in targets:
                 all_targets_final.append({k: v.cpu() for k, v in target.items()})
 
-    final_map50 = compute_map50(all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05)
+    final_map50 = compute_map50(
+        all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05
+    )
 
     # Compute precision and recall at the best model
-    final_metrics = compute_precision_recall(all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05)
+    final_metrics = compute_precision_recall(
+        all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05
+    )
 
     result = {
         "fold": fold_idx,
@@ -545,25 +566,29 @@ def train_one_fold(
 
     logger.info(
         "Fold %d complete: mAP50=%.4f, precision=%.4f, recall=%.4f (%.1fs, %d epochs)",
-        fold_idx, final_map50, final_metrics["precision"], final_metrics["recall"],
-        total_time, epochs_trained,
+        fold_idx,
+        final_map50,
+        final_metrics["precision"],
+        final_metrics["recall"],
+        total_time,
+        epochs_trained,
     )
 
     return result
 
 
 def compute_precision_recall(
-    all_preds: List[Dict[str, torch.Tensor]],
-    all_targets: List[Dict[str, torch.Tensor]],
+    all_preds: list[dict[str, torch.Tensor]],
+    all_targets: list[dict[str, torch.Tensor]],
     iou_threshold: float = 0.5,
     score_threshold: float = 0.05,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute aggregate precision and recall across all images."""
     total_tp = 0
     total_fp = 0
     total_fn = 0
 
-    for pred, target in zip(all_preds, all_targets):
+    for pred, target in zip(all_preds, all_targets, strict=False):
         gt_boxes = target["boxes"]
         gt_labels = target["labels"]
         n_gt = len(gt_boxes)
@@ -588,7 +613,7 @@ def compute_precision_recall(
         pred_labels = pred_labels[order]
 
         matched_gt = set()
-        for pred_box, pred_label in zip(pred_boxes, pred_labels):
+        for pred_box, pred_label in zip(pred_boxes, pred_labels, strict=False):
             best_iou = 0.0
             best_gt_idx = -1
             for gt_idx in range(n_gt):
@@ -619,7 +644,7 @@ def compute_precision_recall(
 # ---------------------------------------------------------------------------
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Faster R-CNN 3-fold cross-validation training.",
     )
@@ -644,8 +669,13 @@ def main() -> None:
     logger.info("=" * 70)
     logger.info("Faster R-CNN 3-Fold Cross-Validation Training")
     logger.info("=" * 70)
-    logger.info("Config: epochs=%d, folds=%d, batch_size=%d, lr=%.4f",
-                args.epochs, args.folds, args.batch_size, args.lr)
+    logger.info(
+        "Config: epochs=%d, folds=%d, batch_size=%d, lr=%.4f",
+        args.epochs,
+        args.folds,
+        args.batch_size,
+        args.lr,
+    )
     logger.info("Device: %s", "CUDA" if torch.cuda.is_available() else "CPU")
     if torch.cuda.is_available():
         logger.info("GPU: %s", torch.cuda.get_device_name(0))
@@ -700,21 +730,23 @@ def main() -> None:
                 tags=tags,
             )
             run_id = run.info.run_id
-            mlflow.log_params({
-                "training/epochs": args.epochs,
-                "training/batch_size": args.batch_size,
-                "training/lr": args.lr,
-                "training/momentum": args.momentum,
-                "training/weight_decay": args.weight_decay,
-                "training/step_size": args.step_size,
-                "training/gamma": args.gamma,
-                "training/early_stopping_patience": args.patience,
-                "data/image_size": args.image_size,
-                "model/arch": "fasterrcnn_resnet50_fpn",
-                "model/num_classes": 1,
-                "cv/n_folds": args.folds,
-                "cv/seed": args.seed,
-            })
+            mlflow.log_params(
+                {
+                    "training/epochs": args.epochs,
+                    "training/batch_size": args.batch_size,
+                    "training/lr": args.lr,
+                    "training/momentum": args.momentum,
+                    "training/weight_decay": args.weight_decay,
+                    "training/step_size": args.step_size,
+                    "training/gamma": args.gamma,
+                    "training/early_stopping_patience": args.patience,
+                    "data/image_size": args.image_size,
+                    "model/arch": "fasterrcnn_resnet50_fpn",
+                    "model/num_classes": 1,
+                    "cv/n_folds": args.folds,
+                    "cv/seed": args.seed,
+                }
+            )
 
         try:
             result = train_one_fold(
@@ -806,7 +838,7 @@ def main() -> None:
     return results_data
 
 
-def aggregate_fold_metrics(fold_results: List[Dict]) -> Dict[str, Tuple[float, float]]:
+def aggregate_fold_metrics(fold_results: list[dict]) -> dict[str, tuple[float, float]]:
     """Compute mean +/- std across folds for each metric."""
     if not fold_results:
         return {}

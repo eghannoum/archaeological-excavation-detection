@@ -22,11 +22,20 @@ import random
 import sys
 from pathlib import Path
 
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 try:
     from PIL import Image, ImageDraw
+
+    from scripts.yolo_utils import denormalize_bbox, parse_yolo_label
 except ImportError:
     Image = None  # type: ignore[assignment]
     ImageDraw = None  # type: ignore[assignment]
+    denormalize_bbox = None  # type: ignore[assignment]
+    parse_yolo_label = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -94,68 +103,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ---------------------------------------------------------------------------
-# YOLO parsing helpers
-# ---------------------------------------------------------------------------
-
-
-def parse_yolo_label(line: str) -> tuple[int, float, float, float, float] | None:
-    """Parse a single YOLO label line.
-
-    Expected format: ``<class_id> <cx> <cy> <w> <h>`` where cx, cy, w, h are
-    normalized to [0, 1].
-
-    Returns:
-        ``(class_id, cx, cy, w, h)`` on success, or ``None`` on malformed input.
-    """
-    stripped = line.strip()
-    if not stripped:
-        return None
-    parts = stripped.split()
-    if len(parts) != 5:
-        return None
-    try:
-        class_id = int(parts[0])
-        cx = float(parts[1])
-        cy = float(parts[2])
-        w = float(parts[3])
-        h = float(parts[4])
-    except (ValueError, IndexError):
-        return None
-    return class_id, cx, cy, w, h
-
-
-def denormalize_bbox(
-    cx: float, cy: float, w: float, h: float, img_w: int, img_h: int
-) -> tuple[float, float, float, float]:
-    """Convert normalized YOLO bbox to pixel ``(x1, y1, x2, y2)``.
-
-    Args:
-        cx, cy, w, h: Normalized coordinates in [0, 1].
-        img_w, img_h: Image dimensions in pixels.
-
-    Returns:
-        ``(x1, y1, x2, y2)`` in pixel space.
-    """
-    px_cx = cx * img_w
-    px_cy = cy * img_h
-    px_w = w * img_w
-    px_h = h * img_h
-
-    x1 = px_cx - px_w / 2.0
-    y1 = px_cy - px_h / 2.0
-    x2 = px_cx + px_w / 2.0
-    y2 = px_cy + px_h / 2.0
-
-    # Clip to image bounds
-    x1 = max(0.0, min(x1, img_w))
-    y1 = max(0.0, min(y1, img_h))
-    x2 = max(0.0, min(x2, img_w))
-    y2 = max(0.0, min(y2, img_h))
-
-    return x1, y1, x2, y2
-
-
-# ---------------------------------------------------------------------------
 # Core
 # ---------------------------------------------------------------------------
 
@@ -172,9 +119,7 @@ def find_images(image_dir: Path) -> list[Path]:
     return images
 
 
-def find_matching_images(
-    image_dir: Path, label_dir: Path
-) -> list[tuple[Path, Path]]:
+def find_matching_images(image_dir: Path, label_dir: Path) -> list[tuple[Path, Path]]:
     """Find image-label pairs where both files exist.
 
     Returns:
@@ -205,7 +150,8 @@ def visualize_one(
         Number of annotations rendered.
     """
     try:
-        img = Image.open(img_path).convert("RGB")
+        with Image.open(img_path) as opened:
+            img = opened.convert("RGB")
     except Exception as exc:
         print(f"WARNING: Could not open {img_path.name}: {exc}", file=sys.stderr)
         return 0
@@ -251,7 +197,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # --- PIL availability ---
-    if Image is None or ImageDraw is None:
+    if Image is None or ImageDraw is None or parse_yolo_label is None or denormalize_bbox is None:
         print(
             "ERROR: PIL (Pillow) is required. Install with: pip install Pillow",
             file=sys.stderr,
@@ -265,10 +211,16 @@ def main() -> None:
 
     # --- Validate source directories exist ---
     if not image_dir.is_dir():
-        print(f"ERROR: --image-dir '{image_dir}' does not exist or is not a directory.", file=sys.stderr)
+        print(
+            f"ERROR: --image-dir '{image_dir}' does not exist or is not a directory.",
+            file=sys.stderr,
+        )
         sys.exit(1)
     if not label_dir.is_dir():
-        print(f"ERROR: --label-dir '{label_dir}' does not exist or is not a directory.", file=sys.stderr)
+        print(
+            f"ERROR: --label-dir '{label_dir}' does not exist or is not a directory.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # --- Find matching image-label pairs ---

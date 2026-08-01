@@ -26,7 +26,10 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.augmentation import get_pipeline
+from scripts.augmentation import (  # noqa: E402  # intentional: import after sys.path setup
+    get_pipeline,
+)
+from scripts.yolo_utils import denormalize_bbox, load_yolo_labels  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,9 +43,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 COLORS = {
-    "original": (0, 255, 0),   # green
-    "light":    (0, 100, 255), # blue (BGR)
-    "heavy":    (0, 0, 220),   # red
+    "original": (0, 255, 0),  # green
+    "light": (255, 100, 0),  # orange (RGB)
+    "heavy": (220, 0, 0),  # red (RGB)
 }
 
 ASPECT_RATIO_TOLERANCE = 0.3
@@ -78,46 +81,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_yolo_labels(label_path: Path) -> tuple[list[list[float]], list[int]]:
-    """Load YOLO-format labels from a text file.
-
-    Returns
-    -------
-    bboxes : list of [cx, cy, w, h] in normalized [0, 1] coords
-    class_labels : list of class IDs
-    """
-    bboxes: list[list[float]] = []
-    class_labels: list[int] = []
-    with open(label_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split()
-            if len(parts) != 5:
-                continue
-            cls_id = int(parts[0])
-            cx, cy, w, h = map(float, parts[1:])
-            bboxes.append([cx, cy, w, h])
-            class_labels.append(cls_id)
-    return bboxes, class_labels
-
-
 # ---------------------------------------------------------------------------
 # Drawing helpers
 # ---------------------------------------------------------------------------
-
-
-def yolo_to_pixel(bboxes: list[list[float]], img_w: int, img_h: int) -> list[tuple[int, int, int, int]]:
-    """Convert YOLO normalized bboxes [cx, cy, w, h] to pixel (x1, y1, x2, y2)."""
-    pixel: list[tuple[int, int, int, int]] = []
-    for cx, cy, w, h in bboxes:
-        x1 = int(round((cx - w / 2) * img_w))
-        y1 = int(round((cy - h / 2) * img_h))
-        x2 = int(round((cx + w / 2) * img_w))
-        y2 = int(round((cy + h / 2) * img_h))
-        pixel.append((x1, y1, x2, y2))
-    return pixel
 
 
 def draw_bboxes(
@@ -129,9 +95,15 @@ def draw_bboxes(
     """Draw bounding boxes on an image copy (in-place on the copy)."""
     img = image.copy()
     h, w = img.shape[:2]
-    pixel = yolo_to_pixel(bboxes, w, h)
-    for x1, y1, x2, y2 in pixel:
-        cv2.rectangle(img, (x1, y1), (x2, y2), color, line_width)
+    for cx, cy, bw, bh in bboxes:
+        x1, y1, x2, y2 = denormalize_bbox(cx, cy, bw, bh, w, h)
+        cv2.rectangle(
+            img,
+            (int(round(x1)), int(round(y1))),
+            (int(round(x2)), int(round(y2))),
+            color,
+            line_width,
+        )
     return img
 
 
@@ -231,16 +203,13 @@ def validate_bboxes(
 
     if aspect_changes:
         results["details"]["min_aspect_ratio_change"] = round(min_change, 4)
-        results["details"]["mean_aspect_ratio_change"] = round(
-            float(np.mean(aspect_changes)), 4
-        )
+        results["details"]["mean_aspect_ratio_change"] = round(float(np.mean(aspect_changes)), 4)
         if min_change < ASPECT_RATIO_TOLERANCE:
             results["aspect_pass"] = False
             bad_count = sum(1 for c in aspect_changes if c < ASPECT_RATIO_TOLERANCE)
             results["details"]["bad_aspect_count"] = bad_count
             logger.warning(
-                "%s [%s] Aspect ratio min match: %.3f — %d bbox(es) below "
-                "tolerance %.1f",
+                "%s [%s] Aspect ratio min match: %.3f — %d bbox(es) below " "tolerance %.1f",
                 sample_name,
                 mode,
                 min_change,
@@ -336,7 +305,9 @@ def main() -> None:
         img_h, img_w = img_rgb.shape[:2]
 
         # Load labels
-        input_bboxes, class_labels = load_yolo_labels(label_path)
+        parsed_labels = load_yolo_labels(label_path)
+        input_bboxes = [[cx, cy, w, h] for _, cx, cy, w, h in parsed_labels]
+        class_labels = [cls_id for cls_id, _, _, _, _ in parsed_labels]
         n_bboxes = len(input_bboxes)
         logger.info(
             "Row %d: %s (%d×%d, %d bboxes)",
@@ -352,12 +323,8 @@ def main() -> None:
         line_width = max(2, int(diag / 180))
 
         # Apply augmentations
-        light_result = light_pipeline(
-            image=img_rgb, bboxes=input_bboxes, class_labels=class_labels
-        )
-        heavy_result = heavy_pipeline(
-            image=img_rgb, bboxes=input_bboxes, class_labels=class_labels
-        )
+        light_result = light_pipeline(image=img_rgb, bboxes=input_bboxes, class_labels=class_labels)
+        heavy_result = heavy_pipeline(image=img_rgb, bboxes=input_bboxes, class_labels=class_labels)
 
         light_img = light_result["image"]
         heavy_img = heavy_result["image"]
@@ -409,7 +376,7 @@ def main() -> None:
     # -- Save combined grid -------------------------------------------------
     fig.suptitle(
         "Augmentation Comparison: Original vs Light vs Heavy\n"
-        "Green = original bboxes  ·  Blue = light aug  ·  Red = heavy aug",
+        "Green = original bboxes  ·  Orange = light aug  ·  Red = heavy aug",
         fontsize=13,
         fontweight="bold",
         y=1.005,
@@ -463,14 +430,28 @@ def main() -> None:
 
         logger.info("")
         logger.info("  ┌─ %s (%d samples) ─────────────────────", mode.upper(), total)
-        logger.info("  │  Count preservation  …  %2d / %-2d  %s", count_ok, total, "✓" if count_ok == total else f"({total - count_ok} FAIL)")
-        logger.info("  │  Center in [0, 1]    …  %2d / %-2d  %s", range_ok, total, "✓" if range_ok == total else f"({total - range_ok} FAIL)")
-        logger.info("  │  Aspect ratio (tol)  …  %2d / %-2d  %s", aspect_ok, total, "✓" if aspect_ok == total else f"({total - aspect_ok} FAIL)")
+        logger.info(
+            "  │  Count preservation  …  %2d / %-2d  %s",
+            count_ok,
+            total,
+            "✓" if count_ok == total else f"({total - count_ok} FAIL)",
+        )
+        logger.info(
+            "  │  Center in [0, 1]    …  %2d / %-2d  %s",
+            range_ok,
+            total,
+            "✓" if range_ok == total else f"({total - range_ok} FAIL)",
+        )
+        logger.info(
+            "  │  Aspect ratio (tol)  …  %2d / %-2d  %s",
+            aspect_ok,
+            total,
+            "✓" if aspect_ok == total else f"({total - aspect_ok} FAIL)",
+        )
         logger.info("  └──────────────────────────────────────────")
 
     fail_any = any(
-        not r["count_pass"] or not r["range_pass"] or not r["aspect_pass"]
-        for r in all_results
+        not r["count_pass"] or not r["range_pass"] or not r["aspect_pass"] for r in all_results
     )
     if fail_any:
         logger.warning("")

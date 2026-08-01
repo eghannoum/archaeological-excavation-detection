@@ -14,16 +14,28 @@ receives image/annotation counts only (sealed, no bbox-level analysis).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
+import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from scripts.yolo_utils import (  # noqa: E402
+    denormalize_bbox,
+    image_dims,
+    load_yolo_labels,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -54,20 +66,9 @@ plt.rcParams.update(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _parse_label(path: Path) -> List[Tuple[int, float, float, float, float]]:
+def _parse_label(path: Path) -> list[tuple[int, float, float, float, float]]:
     """Return list of (cls, cx, cy, w, h) tuples from a YOLO-format label file."""
-    bboxes: List[Tuple[int, float, float, float, float]] = []
-    with open(path) as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split()
-            # class_id cx cy w h
-            cls = int(parts[0])
-            vals = tuple(float(x) for x in parts[1:5])
-            bboxes.append((cls, *vals))
-    return bboxes
+    return load_yolo_labels(path)
 
 
 def _extract_scene_id(filename: str) -> str:
@@ -85,24 +86,31 @@ def _extract_scene_id(filename: str) -> str:
 
 def _rescale_bbox(
     cx: float, cy: float, w: float, h: float, img_w: int, img_h: int
-) -> Tuple[float, float, float, float]:
-    """Convert normalised YOLO coords [0,1] -> pixel coords."""
-    return (cx * img_w, cy * img_h, w * img_w, h * img_h)
+) -> tuple[float, float, float, float]:
+    """Convert normalised YOLO coords [0,1] -> pixel ``(x1, y1, x2, y2)``."""
+    return denormalize_bbox(cx, cy, w, h, img_w, img_h)
 
 
 def _to_pixel_bbox(
-    cx_n: float, cy_n: float, w_n: float, h_n: float
-) -> Tuple[float, float, float, float]:
-    """Shortcut using global IMG_WIDTH, IMG_HEIGHT."""
-    return _rescale_bbox(cx_n, cy_n, w_n, h_n, IMG_WIDTH, IMG_HEIGHT)
+    cx_n: float,
+    cy_n: float,
+    w_n: float,
+    h_n: float,
+    img_w: int = IMG_WIDTH,
+    img_h: int = IMG_HEIGHT,
+) -> tuple[float, float, float, float]:
+    """Convert normalised YOLO coords to a pixel bbox for the given image size.
+
+    Defaults to the global ``IMG_WIDTH``/``IMG_HEIGHT`` for images whose
+    dimensions cannot be read from disk.
+    """
+    return _rescale_bbox(cx_n, cy_n, w_n, h_n, img_w, img_h)
 
 
 # ---------------------------------------------------------------------------
 # Per-split statistics
 # ---------------------------------------------------------------------------
-def analyse_split(
-    split: str, analyse_bboxes: bool = True
-) -> Dict[str, Any]:
+def analyse_split(split: str, analyse_bboxes: bool = True) -> dict[str, Any]:
     """Analyse a single dataset split.
 
     Parameters
@@ -120,14 +128,10 @@ def analyse_split(
     img_dir = DATASET_ROOT / "images" / split
     lab_dir = DATASET_ROOT / "labels" / split
 
-    image_files = sorted(
-        [f for f in os.listdir(img_dir) if f.lower().endswith(IMG_EXT)]
-    )
-    label_files = sorted(
-        [f for f in os.listdir(lab_dir) if f.lower().endswith(LAB_EXT)]
-    )
+    image_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(IMG_EXT)])
+    label_files = sorted([f for f in os.listdir(lab_dir) if f.lower().endswith(LAB_EXT)])
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "split": split,
         "num_images": len(image_files),
         "num_labels": len(label_files),
@@ -139,9 +143,7 @@ def analyse_split(
         scene_counter: Counter = Counter()
         for lf in label_files:
             with open(lab_dir / lf) as fh:
-                total_annotations += sum(
-                    1 for line in fh if line.strip()
-                )
+                total_annotations += sum(1 for line in fh if line.strip())
             scene_counter[_extract_scene_id(lf)] += 1
         result["num_annotations"] = total_annotations
         result["num_scenes"] = len(scene_counter)
@@ -150,15 +152,18 @@ def analyse_split(
 
     # -- Per-image annotation counts ---------------------------------------
     bboxes_per_image = []
-    widths_px: List[float] = []
-    heights_px: List[float] = []
-    areas_px: List[float] = []
-    aspect_ratios: List[float] = []
+    widths_px: list[float] = []
+    heights_px: list[float] = []
+    areas_px: list[float] = []
+    aspect_ratios: list[float] = []
     # Per-image variance tracking
-    per_image_areas: Dict[str, List[float]] = {}
+    per_image_areas: dict[str, list[float]] = {}
 
-    annotation_issues: List[str] = []
+    annotation_issues: list[str] = []
     scene_counter: Counter = Counter()
+
+    # Precompute image stems for O(1) label->image matching
+    image_stems = {Path(f).stem for f in image_files}
 
     for lf in label_files:
         stem = Path(lf).stem
@@ -169,36 +174,38 @@ def analyse_split(
         scene_counter[scene_id] += 1
 
         # Check that a matching image exists
-        img_exists = any(
-            Path(ifile).stem == stem for ifile in image_files
-        )
+        img_exists = stem in image_stems
         if not img_exists:
             annotation_issues.append(f"Label {lf} has no matching image")
+
+        # Read per-image dimensions, falling back to the global defaults
+        # when the image file is missing or unreadable.
+        img_w, img_h = IMG_WIDTH, IMG_HEIGHT
+        img_path = img_dir / f"{stem}{IMG_EXT}"
+        if img_path.exists():
+            with contextlib.suppress(Exception):
+                img_w, img_h = image_dims(img_path)
 
         img_areas = []
         for bbox in bboxes:
             cls_id, cx_n, cy_n, w_n, h_n = bbox  # type: ignore
 
             if cls_id != 0:
-                annotation_issues.append(
-                    f"Non-zero class_id in {lf}: {cls_id}"
-                )
+                annotation_issues.append(f"Non-zero class_id in {lf}: {cls_id}")
 
             # Validate ranges
             for val_name, val in [("cx", cx_n), ("cy", cy_n), ("w", w_n), ("h", h_n)]:
                 if val < 0.0 or val > 1.0:
-                    annotation_issues.append(
-                        f"{val_name}={val:.4f} outside [0,1] in {lf}"
-                    )
+                    annotation_issues.append(f"{val_name}={val:.4f} outside [0,1] in {lf}")
 
             # Zero-size check
             if w_n <= 0.0 or h_n <= 0.0:
-                annotation_issues.append(
-                    f"Zero-size bbox in {lf}: w={w_n:.6f} h={h_n:.6f}"
-                )
+                annotation_issues.append(f"Zero-size bbox in {lf}: w={w_n:.6f} h={h_n:.6f}")
                 continue
 
-            cx_px, cy_px, w_px, h_px = _to_pixel_bbox(cx_n, cy_n, w_n, h_n)
+            x1_px, y1_px, x2_px, y2_px = _to_pixel_bbox(cx_n, cy_n, w_n, h_n, img_w, img_h)
+            w_px = x2_px - x1_px
+            h_px = y2_px - y1_px
             area_px = w_px * h_px
             widths_px.append(w_px)
             heights_px.append(h_px)
@@ -238,10 +245,13 @@ def analyse_split(
 # ---------------------------------------------------------------------------
 # Statistics helpers
 # ---------------------------------------------------------------------------
-def _describe(arr: np.ndarray, name: str = "") -> Dict[str, float]:
+def _describe(arr: np.ndarray, name: str = "") -> dict[str, float]:
     """Compute descriptive statistics for a 1-D array."""
     if arr.size == 0:
-        return {k: 0.0 for k in ("mean", "median", "std", "min", "max", "p1", "p5", "p25", "p75", "p95", "p99")}
+        return {
+            k: 0.0
+            for k in ("mean", "median", "std", "min", "max", "p1", "p5", "p25", "p75", "p95", "p99")
+        }
     return {
         "mean": float(np.mean(arr)),
         "median": float(np.median(arr)),
@@ -257,7 +267,7 @@ def _describe(arr: np.ndarray, name: str = "") -> Dict[str, float]:
     }
 
 
-def _conf_interval(arr: np.ndarray, confidence: float = 0.95) -> Tuple[float, float]:
+def _conf_interval(arr: np.ndarray, confidence: float = 0.95) -> tuple[float, float]:
     """Return (lower, upper) confidence interval for the mean."""
     from scipy import stats as scipy_stats  # lazy import
 
@@ -281,15 +291,15 @@ def _save_figure(fig: plt.Figure, path: Path) -> None:
 
 
 def plot_bbox_area_histogram(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     output_dir: Path,
 ) -> str:
     """Plot and save bbox area distributions for train + val."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 
     for ax, stats, label in zip(
-        axes, [train_stats, val_stats], ["Train", "Validation"]
+        axes, [train_stats, val_stats], ["Train", "Validation"], strict=False
     ):
         areas = stats["areas_px"]
         ax.hist(areas, bins=80, color="steelblue", edgecolor="none", alpha=0.85)
@@ -318,15 +328,15 @@ def plot_bbox_area_histogram(
 
 
 def plot_bboxes_per_image(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     output_dir: Path,
 ) -> str:
     """Bar chart of bboxes per image for train + val."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 
     for ax, stats, label in zip(
-        axes, [train_stats, val_stats], ["Train", "Validation"]
+        axes, [train_stats, val_stats], ["Train", "Validation"], strict=False
     ):
         bpi = stats["bboxes_per_image"]
         ax.hist(bpi, bins=50, color="seagreen", edgecolor="none", alpha=0.85)
@@ -354,15 +364,15 @@ def plot_bboxes_per_image(
 
 
 def plot_aspect_ratio_scatter(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     output_dir: Path,
 ) -> str:
     """Scatter plot of bbox width vs height with aspect-ratio reference lines."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
 
     for ax, stats, label in zip(
-        axes, [train_stats, val_stats], ["Train", "Validation"]
+        axes, [train_stats, val_stats], ["Train", "Validation"], strict=False
     ):
         w = stats["widths_px"]
         h = stats["heights_px"]
@@ -414,15 +424,15 @@ def plot_aspect_ratio_scatter(
 
 
 def plot_width_height_histograms(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     output_dir: Path,
 ) -> str:
     """Side-by-side histograms of bbox width and height."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
     for row, (stats, label) in enumerate(
-        zip([train_stats, val_stats], ["Train", "Validation"])
+        zip([train_stats, val_stats], ["Train", "Validation"], strict=False)
     ):
         w = stats["widths_px"]
         h = stats["heights_px"]
@@ -452,8 +462,8 @@ def plot_width_height_histograms(
 
 
 def plot_parent_scene_distribution(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     test_num_images: int,
     test_num_scenes: int,
     output_dir: Path,
@@ -465,12 +475,15 @@ def plot_parent_scene_distribution(
         axes,
         [train_stats, val_stats, None],
         ["Train", "Validation", "Test"],
+        strict=False,
     ):
         if stats is not None:
             scenes = stats["scenes"]
             ids = list(scenes.keys())
             counts = list(scenes.values())
-            ax.bar(range(len(ids)), counts, color="cornflowerblue", edgecolor="white", linewidth=0.3)
+            ax.bar(
+                range(len(ids)), counts, color="cornflowerblue", edgecolor="white", linewidth=0.3
+            )
             ax.set_title(f"{label} — {stats['num_scenes']} scenes")
         else:
             ax.text(
@@ -495,8 +508,8 @@ def plot_parent_scene_distribution(
 
 
 def plot_bbox_edge_padding(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
     output_dir: Path,
 ) -> str:
     """Analyse bbox proximity to image edges.
@@ -507,7 +520,7 @@ def plot_bbox_edge_padding(
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 
     for ax, stats, label in zip(
-        axes, [train_stats, val_stats], ["Train", "Validation"]
+        axes, [train_stats, val_stats], ["Train", "Validation"], strict=False
     ):
         bpi = stats["bboxes_per_image"]
         areas = stats["areas_px"]
@@ -516,8 +529,12 @@ def plot_bbox_edge_padding(
         # Instead, plot a 2D histogram of bbox area vs bboxes-per-image.
         if len(bpi) > 0 and len(areas) > 0:
             ax.scatter(
-                bpi[: len(areas)], areas[: len(bpi)],
-                s=5, alpha=0.3, c="purple", edgecolors="none",
+                bpi[: len(areas)],
+                areas[: len(bpi)],
+                s=5,
+                alpha=0.3,
+                c="purple",
+                edgecolors="none",
             )
             ax.set_xlabel("Bboxes per image")
             ax.set_ylabel("Bbox area (px²)")
@@ -535,17 +552,17 @@ def plot_bbox_edge_padding(
 # Report generation
 # ---------------------------------------------------------------------------
 def generate_report(
-    train_stats: Dict[str, Any],
-    val_stats: Dict[str, Any],
-    test_stats: Dict[str, Any],
-    figures: Dict[str, str],
+    train_stats: dict[str, Any],
+    val_stats: dict[str, Any],
+    test_stats: dict[str, Any],
+    figures: dict[str, str],
     output_path: Path,
 ) -> str:
     """Assemble the Markdown report and write to *output_path*.
 
     Returns the report text.
     """
-    lines: List[str] = []
+    lines: list[str] = []
 
     def _w(text: str = "") -> None:
         lines.append(text)
@@ -565,12 +582,8 @@ def generate_report(
     # ------------------------------------------------------------------
     _w("## 1. Summary Statistics")
     _w()
-    _w(
-        "| Metric | Train | Validation | Test |"
-    )
-    _w(
-        "|--------|-------|------------|------|"
-    )
+    _w("| Metric | Train | Validation | Test |")
+    _w("|--------|-------|------------|------|")
     _w(
         f"| Images | {train_stats['num_images']} | {val_stats['num_images']} | {test_stats['num_images']} |"
     )
@@ -584,9 +597,7 @@ def generate_report(
     _w(
         f"| Bboxes/image (mean ± std) | {t_bpi['mean']:.1f} ± {t_bpi['std']:.1f} | {v_bpi['mean']:.1f} ± {v_bpi['std']:.1f} | — (sealed) |"
     )
-    _w(
-        f"| Bboxes/image (median) | {t_bpi['median']:.0f} | {v_bpi['median']:.0f} | — |"
-    )
+    _w(f"| Bboxes/image (median) | {t_bpi['median']:.0f} | {v_bpi['median']:.0f} | — |")
     _w(
         f"| Bboxes/image (range) | {t_bpi['min']:.0f} – {t_bpi['max']:.0f} | {v_bpi['min']:.0f} – {v_bpi['max']:.0f} | — |"
     )
@@ -598,7 +609,9 @@ def generate_report(
     _w(
         f"| Bbox area (px², range) | {t_area['min']:.1f} – {t_area['max']:.1f} | {v_area['min']:.1f} – {v_area['max']:.1f} | — |"
     )
-    _w(f"| Image size | {IMG_WIDTH}×{IMG_HEIGHT} | {IMG_WIDTH}×{IMG_HEIGHT} | {IMG_WIDTH}×{IMG_HEIGHT} |")
+    _w(
+        f"| Image size | {IMG_WIDTH}×{IMG_HEIGHT} | {IMG_WIDTH}×{IMG_HEIGHT} | {IMG_WIDTH}×{IMG_HEIGHT} |"
+    )
 
     t_w = _describe(train_stats["widths_px"], "width")
     t_h = _describe(train_stats["heights_px"], "height")
@@ -615,12 +628,8 @@ def generate_report(
     # Confidence intervals for mean bboxes/image
     t_ci = _conf_interval(train_stats["bboxes_per_image"])
     v_ci = _conf_interval(val_stats["bboxes_per_image"])
-    _w(
-        f"- **95% CI for mean bboxes/image (train):** {t_ci[0]:.2f} – {t_ci[1]:.2f}"
-    )
-    _w(
-        f"- **95% CI for mean bboxes/image (val):**   {v_ci[0]:.2f} – {v_ci[1]:.2f}"
-    )
+    _w(f"- **95% CI for mean bboxes/image (train):** {t_ci[0]:.2f} – {t_ci[1]:.2f}")
+    _w(f"- **95% CI for mean bboxes/image (val):**   {v_ci[0]:.2f} – {v_ci[1]:.2f}")
     _w()
 
     # ------------------------------------------------------------------
@@ -706,9 +715,7 @@ def generate_report(
     _w()
 
     # Issues
-    all_issues = (
-        train_stats["annotation_issues"] + val_stats["annotation_issues"]
-    )
+    all_issues = train_stats["annotation_issues"] + val_stats["annotation_issues"]
     if all_issues:
         _w("### Issues Found")
         _w()
@@ -736,7 +743,7 @@ def generate_report(
     _w()
 
     # Compute CV per image
-    def _per_image_cv(per_img_areas: Dict[str, List[float]]) -> np.ndarray:
+    def _per_image_cv(per_img_areas: dict[str, list[float]]) -> np.ndarray:
         cvs = []
         for _stem, areas in per_img_areas.items():
             if len(areas) < 2:
@@ -794,13 +801,14 @@ def generate_report(
 
     _w("### 5.2 Scale Diversity")
     _w()
-    _w(
-        "Holes range from **<10 px to >100 px** in both dimensions. "
-        "Recommendations:"
-    )
+    _w("Holes range from **<10 px to >100 px** in both dimensions. " "Recommendations:")
     _w()
-    _w("- **Multi-scale training** (Mosaic augmentation, random resize) helps generalisation across scales")
-    _w("- **Image size 640** (as configured) provides ~0.55× downsampling of native 1160 px — sufficient resolution to capture small holes")
+    _w(
+        "- **Multi-scale training** (Mosaic augmentation, random resize) helps generalisation across scales"
+    )
+    _w(
+        "- **Image size 640** (as configured) provides ~0.55× downsampling of native 1160 px — sufficient resolution to capture small holes"
+    )
     _w("- Consider **FPN-style necks** (built into YOLO) which fuse multi-scale features")
     _w()
 
@@ -815,12 +823,14 @@ def generate_report(
 
     _w("### 5.4 Augmentation Recommendations")
     _w()
-    _w(
-        "Given the small bbox sizes and skewed distribution:"
-    )
+    _w("Given the small bbox sizes and skewed distribution:")
     _w()
-    _w("- **Heavy augmentation** (mosaic, mixup, HSV jitter) is safe since scenes are spatially non-overlapping")
-    _w("- **Copy-paste** augmentations could help with extremely small holes that occupy <0.1% of image area")
+    _w(
+        "- **Heavy augmentation** (mosaic, mixup, HSV jitter) is safe since scenes are spatially non-overlapping"
+    )
+    _w(
+        "- **Copy-paste** augmentations could help with extremely small holes that occupy <0.1% of image area"
+    )
     _w("- Avoid aggressive random crops that might discard edge bboxes")
     _w()
 
@@ -841,9 +851,7 @@ def generate_report(
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyse archaeological hole-detection dataset."
-    )
+    parser = argparse.ArgumentParser(description="Analyse archaeological hole-detection dataset.")
     parser.add_argument(
         "--output",
         type=str,
@@ -866,7 +874,9 @@ def main() -> None:
 
     print(f"      Images: {train_stats['num_images']}")
     print(f"      Annotations: {train_stats['num_annotations']}")
-    print(f"      Bboxes/img: {np.mean(train_stats['bboxes_per_image']):.1f} ± {np.std(train_stats['bboxes_per_image']):.1f}")
+    print(
+        f"      Bboxes/img: {np.mean(train_stats['bboxes_per_image']):.1f} ± {np.std(train_stats['bboxes_per_image']):.1f}"
+    )
     print(f"      Scenes: {train_stats['num_scenes']}")
 
     print("\n[2/5] Analysing val split ...")
@@ -874,7 +884,9 @@ def main() -> None:
 
     print(f"      Images: {val_stats['num_images']}")
     print(f"      Annotations: {val_stats['num_annotations']}")
-    print(f"      Bboxes/img: {np.mean(val_stats['bboxes_per_image']):.1f} ± {np.std(val_stats['bboxes_per_image']):.1f}")
+    print(
+        f"      Bboxes/img: {np.mean(val_stats['bboxes_per_image']):.1f} ± {np.std(val_stats['bboxes_per_image']):.1f}"
+    )
     print(f"      Scenes: {val_stats['num_scenes']}")
 
     print("\n[3/5] Counting test split (sealed) ...")
@@ -882,7 +894,9 @@ def main() -> None:
 
     print(f"      Images: {test_stats['num_images']}")
     print(f"      Annotations: {test_stats['num_annotations']}")
-    print(f"      Scenes: {len(set(_extract_scene_id(f) for f in os.listdir(DATASET_ROOT / 'images' / 'test') if f.endswith(IMG_EXT)))}")
+    print(
+        f"      Scenes: {len(set(_extract_scene_id(f) for f in os.listdir(DATASET_ROOT / 'images' / 'test') if f.endswith(IMG_EXT)))}"
+    )
 
     print("\n[4/5] Generating figures ...")
 

@@ -22,7 +22,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import mlflow
 import numpy as np
@@ -42,12 +42,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.mlflow_utils import (
+from scripts.mlflow_utils import (  # noqa: E402  # intentional: import after sys.path setup
     TRACKING_URI,
-    finish_mlflow,
-    init_experiment,
-    log_config,
-    log_metrics,
 )
 
 # ---------------------------------------------------------------------------
@@ -113,21 +109,16 @@ class DETRDataset(Dataset):
     coordinates are transformed to match the resized + padded image.
     """
 
-    def __init__(self, image_paths: List[Path], image_size: int = 640):
+    def __init__(self, image_paths: list[Path], image_size: int = 640):
         self.image_paths = image_paths
         self.image_size = image_size
 
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         img_path = self.image_paths[idx]
-        label_path = (
-            DATASET_DIR
-            / "labels"
-            / img_path.parent.name
-            / (img_path.stem + ".txt")
-        )
+        label_path = DATASET_DIR / "labels" / img_path.parent.name / (img_path.stem + ".txt")
 
         # Load image
         img = Image.open(img_path).convert("RGB")
@@ -154,13 +145,18 @@ class DETRDataset(Dataset):
         boxes = []
         labels = []
         if label_path.exists():
-            with open(label_path, "r") as f:
+            with open(label_path) as f:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) < 5:
                         continue
                     class_id = int(parts[0])
-                    cx, cy, w, h = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
+                    cx, cy, w, h = (
+                        float(parts[1]),
+                        float(parts[2]),
+                        float(parts[3]),
+                        float(parts[4]),
+                    )
 
                     # Transform YOLO coords to resized + padded image
                     # Original pixel: cx_px = cx * orig_w, cy_px = cy * orig_h
@@ -227,16 +223,15 @@ class HungarianMatcher(nn.Module):
         self.cost_class = cost_class
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
-        assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, \
-            "all costs cant be zero"
+        assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, "all costs cant be zero"
 
     @torch.no_grad()
     def forward(
         self,
         pred_logits: torch.Tensor,
         pred_boxes: torch.Tensor,
-        targets: List[Dict[str, torch.Tensor]],
-    ) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        targets: list[dict[str, torch.Tensor]],
+    ) -> list[tuple[torch.Tensor, torch.Tensor]]:
         """
         Parameters
         ----------
@@ -333,11 +328,15 @@ class GIoULoss(nn.Module):
         inter_y1 = torch.max(pred_boxes[:, 1], target_boxes[:, 1])
         inter_x2 = torch.min(pred_boxes[:, 2], target_boxes[:, 2])
         inter_y2 = torch.min(pred_boxes[:, 3], target_boxes[:, 3])
-        inter_area = torch.clamp(inter_x2 - inter_x1, min=0) * torch.clamp(inter_y2 - inter_y1, min=0)
+        inter_area = torch.clamp(inter_x2 - inter_x1, min=0) * torch.clamp(
+            inter_y2 - inter_y1, min=0
+        )
 
         # Areas
         pred_area = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
-        target_area = (target_boxes[:, 2] - target_boxes[:, 0]) * (target_boxes[:, 3] - target_boxes[:, 1])
+        target_area = (target_boxes[:, 2] - target_boxes[:, 0]) * (
+            target_boxes[:, 3] - target_boxes[:, 1]
+        )
 
         # Union
         union_area = pred_area + target_area - inter_area
@@ -374,7 +373,7 @@ class SetCriterion(nn.Module):
         self,
         num_classes: int,
         matcher: HungarianMatcher,
-        weight_dict: Dict[str, float],
+        weight_dict: dict[str, float],
         eos_coef: float = 0.1,
     ):
         """
@@ -401,9 +400,9 @@ class SetCriterion(nn.Module):
 
     def forward(
         self,
-        outputs: Dict[str, torch.Tensor],
-        targets: List[Dict[str, torch.Tensor]],
-    ) -> Dict[str, torch.Tensor]:
+        outputs: dict[str, torch.Tensor],
+        targets: list[dict[str, torch.Tensor]],
+    ) -> dict[str, torch.Tensor]:
         """
         Parameters
         ----------
@@ -430,9 +429,9 @@ class SetCriterion(nn.Module):
     def _loss_labels(
         self,
         pred_logits: torch.Tensor,
-        targets: List[Dict[str, torch.Tensor]],
-        indices: List[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Dict[str, torch.Tensor]:
+        targets: list[dict[str, torch.Tensor]],
+        indices: list[tuple[torch.Tensor, torch.Tensor]],
+    ) -> dict[str, torch.Tensor]:
         """Classification loss (cross-entropy)."""
         batch_size, num_queries, _ = pred_logits.shape
 
@@ -463,16 +462,17 @@ class SetCriterion(nn.Module):
     def _loss_boxes(
         self,
         pred_boxes: torch.Tensor,
-        targets: List[Dict[str, torch.Tensor]],
-        indices: List[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Dict[str, torch.Tensor]:
+        targets: list[dict[str, torch.Tensor]],
+        indices: list[tuple[torch.Tensor, torch.Tensor]],
+    ) -> dict[str, torch.Tensor]:
         """Box regression losses (L1 + GIoU) on matched pairs only."""
-        batch_size = pred_boxes.shape[0]
         num_matched = sum(len(pred_idx) for pred_idx, _ in indices)
 
         if num_matched == 0:
-            return {"loss_bbox": torch.tensor(0.0, device=pred_boxes.device),
-                    "loss_giou": torch.tensor(0.0, device=pred_boxes.device)}
+            return {
+                "loss_bbox": torch.tensor(0.0, device=pred_boxes.device),
+                "loss_giou": torch.tensor(0.0, device=pred_boxes.device),
+            }
 
         # Gather matched predictions and targets
         pred_boxes_matched = []
@@ -502,8 +502,8 @@ class SetCriterion(nn.Module):
 
 
 def compute_map50(
-    all_preds: List[Dict[str, torch.Tensor]],
-    all_targets: List[Dict[str, torch.Tensor]],
+    all_preds: list[dict[str, torch.Tensor]],
+    all_targets: list[dict[str, torch.Tensor]],
     iou_threshold: float = 0.5,
     score_threshold: float = 0.05,
 ) -> float:
@@ -516,7 +516,7 @@ def compute_map50(
     """
     aps = []
 
-    for pred, target in zip(all_preds, all_targets):
+    for pred, target in zip(all_preds, all_targets, strict=False):
         gt_boxes = target["boxes"]
         gt_labels = target["labels"]
         n_gt = len(gt_boxes)
@@ -547,7 +547,7 @@ def compute_map50(
         # Match predictions to GT
         matched_gt = set()
         tp = 0
-        for pred_box, pred_label in zip(pred_boxes, pred_labels):
+        for pred_box, pred_label in zip(pred_boxes, pred_labels, strict=False):
             best_iou = 0.0
             best_gt_idx = -1
             for gt_idx in range(n_gt):
@@ -571,17 +571,17 @@ def compute_map50(
 
 
 def compute_precision_recall(
-    all_preds: List[Dict[str, torch.Tensor]],
-    all_targets: List[Dict[str, torch.Tensor]],
+    all_preds: list[dict[str, torch.Tensor]],
+    all_targets: list[dict[str, torch.Tensor]],
     iou_threshold: float = 0.5,
     score_threshold: float = 0.05,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute aggregate precision and recall across all images."""
     total_tp = 0
     total_fp = 0
     total_fn = 0
 
-    for pred, target in zip(all_preds, all_targets):
+    for pred, target in zip(all_preds, all_targets, strict=False):
         gt_boxes = target["boxes"]
         gt_labels = target["labels"]
         n_gt = len(gt_boxes)
@@ -605,7 +605,7 @@ def compute_precision_recall(
         pred_labels = pred_labels[order]
 
         matched_gt = set()
-        for pred_box, pred_label in zip(pred_boxes, pred_labels):
+        for pred_box, pred_label in zip(pred_boxes, pred_labels, strict=False):
             best_iou = 0.0
             best_gt_idx = -1
             for gt_idx in range(n_gt):
@@ -640,7 +640,7 @@ def postprocess_detr_output(
     pred_logits: torch.Tensor,
     pred_boxes: torch.Tensor,
     score_threshold: float = 0.05,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Convert DETR output to filtered predictions for mAP evaluation.
 
     Parameters
@@ -683,28 +683,32 @@ def postprocess_detr_output(
 
 
 def targets_to_pixel_coords(
-    targets: List[Dict[str, torch.Tensor]],
+    targets: list[dict[str, torch.Tensor]],
     image_size: int = 640,
-) -> List[Dict[str, torch.Tensor]]:
+) -> list[dict[str, torch.Tensor]]:
     """Convert target boxes from normalized cx,cy,w,h to pixel xyxy."""
     converted = []
     for t in targets:
         boxes = t["boxes"]
         if len(boxes) == 0:
-            converted.append({
-                "boxes": torch.zeros((0, 4), dtype=torch.float32),
-                "labels": t["labels"],
-            })
+            converted.append(
+                {
+                    "boxes": torch.zeros((0, 4), dtype=torch.float32),
+                    "labels": t["labels"],
+                }
+            )
             continue
         cx, cy, w, h = boxes.unbind(-1)
         x1 = (cx - 0.5 * w) * image_size
         y1 = (cy - 0.5 * h) * image_size
         x2 = (cx + 0.5 * w) * image_size
         y2 = (cy + 0.5 * h) * image_size
-        converted.append({
-            "boxes": torch.stack([x1, y1, x2, y2], dim=-1),
-            "labels": t["labels"],
-        })
+        converted.append(
+            {
+                "boxes": torch.stack([x1, y1, x2, y2], dim=-1),
+                "labels": t["labels"],
+            }
+        )
     return converted
 
 
@@ -713,18 +717,18 @@ def targets_to_pixel_coords(
 # ---------------------------------------------------------------------------
 
 
-def get_all_images() -> List[Path]:
+def get_all_images() -> list[Path]:
     """Return all image paths in both train and val directories."""
-    images: List[Path] = []
+    images: list[Path] = []
     for d in [IMAGES_TRAIN, IMAGES_VAL]:
         if d.exists():
             images.extend(sorted(d.iterdir()))
     return images
 
 
-def group_by_parent_scene(image_paths: List[Path]) -> Dict[str, List[Path]]:
+def group_by_parent_scene(image_paths: list[Path]) -> dict[str, list[Path]]:
     """Group image paths by parent-scene identifier."""
-    groups: Dict[str, List[Path]] = {}
+    groups: dict[str, list[Path]] = {}
     for img_path in image_paths:
         scene = extract_parent_scene(img_path.name)
         groups.setdefault(scene, []).append(img_path)
@@ -732,16 +736,16 @@ def group_by_parent_scene(image_paths: List[Path]) -> Dict[str, List[Path]]:
 
 
 def create_fold_splits(
-    scene_groups: Dict[str, List[Path]],
+    scene_groups: dict[str, list[Path]],
     n_folds: int = 3,
     seed: int = 42,
-) -> List[Tuple[List[Path], List[Path]]]:
+) -> list[tuple[list[Path], list[Path]]]:
     """Split parent-scene groups into n_folds train/val folds."""
     scenes = list(scene_groups.keys())
     rng = np.random.default_rng(seed)
     rng.shuffle(scenes)
 
-    fold_scenes: List[List[str]] = [[] for _ in range(n_folds)]
+    fold_scenes: list[list[str]] = [[] for _ in range(n_folds)]
     for i, scene in enumerate(scenes):
         fold_scenes[i % n_folds].append(scene)
 
@@ -811,18 +815,20 @@ def create_model(
             map_location="cpu",
         )
         # Remove class_embed keys (91+1 classes vs our 1+1) to avoid size mismatch
-        pretrained_dict = {
-            k: v for k, v in state_dict["model"].items()
-            if "class_embed" not in k
-        }
+        pretrained_dict = {k: v for k, v in state_dict["model"].items() if "class_embed" not in k}
         missing, unexpected = model.load_state_dict(pretrained_dict, strict=False)
         logger.info(
             "Loaded pretrained weights. Missing: %d keys (class_embed), Unexpected: %d keys",
-            len(missing), len(unexpected),
+            len(missing),
+            len(unexpected),
         )
 
     n_params = sum(p.numel() for p in model.parameters())
-    logger.info("DETR loaded: %.1fM parameters, num_queries=100, num_classes=%d", n_params / 1e6, num_classes)
+    logger.info(
+        "DETR loaded: %.1fM parameters, num_queries=100, num_classes=%d",
+        n_params / 1e6,
+        num_classes,
+    )
     return model
 
 
@@ -833,8 +839,8 @@ def create_model(
 
 def train_one_fold(
     fold_idx: int,
-    train_paths: List[Path],
-    val_paths: List[Path],
+    train_paths: list[Path],
+    val_paths: list[Path],
     epochs: int = 100,
     batch_size: int = 4,
     lr: float = 1e-4,
@@ -845,7 +851,7 @@ def train_one_fold(
     num_classes: int = 1,
     seed: int = 42,
     use_mlflow: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Train DETR for one fold with early stopping.
 
     Returns
@@ -857,7 +863,12 @@ def train_one_fold(
 
     logger.info(
         "Fold %d: device=%s, train=%d, val=%d, batch_size=%d, epochs=%d",
-        fold_idx, device, len(train_paths), len(val_paths), batch_size, epochs,
+        fold_idx,
+        device,
+        len(train_paths),
+        len(val_paths),
+        batch_size,
+        epochs,
     )
 
     # --- Datasets ---
@@ -888,18 +899,22 @@ def train_one_fold(
 
     # --- Loss components ---
     matcher = HungarianMatcher(
-        cost_class=1.0, cost_bbox=5.0, cost_giou=2.0,
+        cost_class=1.0,
+        cost_bbox=5.0,
+        cost_giou=2.0,
     )
 
     weight_dict = {"loss_ce": 1.0, "loss_bbox": 5.0, "loss_giou": 2.0}
     # Add auxiliary loss weights (one per decoder layer, layers 0..4 of 6 total)
     num_aux = 5  # DETR has 6 decoder layers, aux losses for first 5
     for i in range(num_aux):
-        weight_dict.update({
-            f"loss_ce_{i}": 1.0,
-            f"loss_bbox_{i}": 5.0,
-            f"loss_giou_{i}": 2.0,
-        })
+        weight_dict.update(
+            {
+                f"loss_ce_{i}": 1.0,
+                f"loss_bbox_{i}": 5.0,
+                f"loss_giou_{i}": 2.0,
+            }
+        )
 
     criterion = SetCriterion(
         num_classes=num_classes,
@@ -925,7 +940,7 @@ def train_one_fold(
             other_params.append(param)
 
     param_groups = [
-        {"params": backbone_params, "lr": lr * 0.1},   # backbone: 10x lower LR
+        {"params": backbone_params, "lr": lr * 0.1},  # backbone: 10x lower LR
         {"params": transformer_params, "lr": lr},
         {"params": other_params, "lr": lr},
     ]
@@ -973,7 +988,8 @@ def train_one_fold(
             # Weight and sum all losses
             total_loss = sum(
                 loss_dict[k] * criterion.weight_dict[k]
-                for k in loss_dict.keys() if k in criterion.weight_dict
+                for k in loss_dict
+                if k in criterion.weight_dict
             )
 
             optimizer.zero_grad()
@@ -1022,7 +1038,13 @@ def train_one_fold(
         current_lr = optimizer.param_groups[1]["lr"]  # transformer LR
         logger.info(
             "Fold %d | Epoch %d/%d | loss=%.4f | mAP50=%.4f | lr=%.2e | time=%.1fs",
-            fold_idx, epoch + 1, epochs, avg_train_loss, map50, current_lr, epoch_time,
+            fold_idx,
+            epoch + 1,
+            epochs,
+            avg_train_loss,
+            map50,
+            current_lr,
+            epoch_time,
         )
 
         # MLflow per-epoch logging
@@ -1050,7 +1072,10 @@ def train_one_fold(
         if epochs_without_improvement >= patience:
             logger.info(
                 "Fold %d: Early stopping at epoch %d (best=%d, patience=%d)",
-                fold_idx, epoch + 1, best_epoch, patience,
+                fold_idx,
+                epoch + 1,
+                best_epoch,
+                patience,
             )
             break
 
@@ -1071,17 +1096,25 @@ def train_one_fold(
             outputs = model(images)
             for b in range(len(images)):
                 pred = postprocess_detr_output(
-                    outputs["pred_logits"][b].cpu(), outputs["pred_boxes"][b].cpu(), score_threshold=0.05,
+                    outputs["pred_logits"][b].cpu(),
+                    outputs["pred_boxes"][b].cpu(),
+                    score_threshold=0.05,
                 )
                 all_preds_final.append(pred)
             targets_cpu = [{k: v.cpu() for k, v in t.items()} for t in targets]
             all_targets_final.extend(targets_to_pixel_coords(targets_cpu, image_size=image_size))
 
-    final_map50 = compute_map50(all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05)
-    final_metrics = compute_precision_recall(all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05)
+    final_map50 = compute_map50(
+        all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05
+    )
+    final_metrics = compute_precision_recall(
+        all_preds_final, all_targets_final, iou_threshold=0.5, score_threshold=0.05
+    )
 
     # Peak VRAM
-    peak_vram_gb = torch.cuda.max_memory_allocated() / (1024 ** 3) if torch.cuda.is_available() else 0.0
+    peak_vram_gb = (
+        torch.cuda.max_memory_allocated() / (1024**3) if torch.cuda.is_available() else 0.0
+    )
 
     result = {
         "fold": fold_idx,
@@ -1099,8 +1132,13 @@ def train_one_fold(
 
     logger.info(
         "Fold %d complete: mAP50=%.4f, precision=%.4f, recall=%.4f (peak_vram=%.2fGB, %.1fs, %d epochs)",
-        fold_idx, final_map50, final_metrics["precision"], final_metrics["recall"],
-        peak_vram_gb, total_time, epochs_trained,
+        fold_idx,
+        final_map50,
+        final_metrics["precision"],
+        final_metrics["recall"],
+        peak_vram_gb,
+        total_time,
+        epochs_trained,
     )
 
     return result
@@ -1111,7 +1149,7 @@ def train_one_fold(
 # ---------------------------------------------------------------------------
 
 
-def aggregate_fold_metrics(fold_results: List[Dict]) -> Dict[str, Tuple[float, float]]:
+def aggregate_fold_metrics(fold_results: list[dict]) -> dict[str, tuple[float, float]]:
     """Compute mean +/- std across folds for each metric."""
     if not fold_results:
         return {}
@@ -1135,7 +1173,7 @@ def aggregate_fold_metrics(fold_results: List[Dict]) -> Dict[str, Tuple[float, f
 # ---------------------------------------------------------------------------
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="DETR ResNet-50 3-fold cross-validation training.",
     )
@@ -1158,12 +1196,18 @@ def main() -> None:
     logger.info("=" * 70)
     logger.info("DETR ResNet-50 3-Fold Cross-Validation Training")
     logger.info("=" * 70)
-    logger.info("Config: epochs=%d, folds=%d, batch_size=%d, lr=%.2e, weight_decay=%.2e",
-                args.epochs, args.folds, args.batch_size, args.lr, args.weight_decay)
+    logger.info(
+        "Config: epochs=%d, folds=%d, batch_size=%d, lr=%.2e, weight_decay=%.2e",
+        args.epochs,
+        args.folds,
+        args.batch_size,
+        args.lr,
+        args.weight_decay,
+    )
     logger.info("Device: %s", "CUDA" if torch.cuda.is_available() else "CPU")
     if torch.cuda.is_available():
         logger.info("GPU: %s", torch.cuda.get_device_name(0))
-        logger.info("VRAM: %.1f GB", torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
+        logger.info("VRAM: %.1f GB", torch.cuda.get_device_properties(0).total_memory / (1024**3))
 
     # Scan dataset
     all_images = get_all_images()
@@ -1219,28 +1263,30 @@ def main() -> None:
                 tags=tags,
             )
             run_id = run.info.run_id
-            mlflow.log_params({
-                "training/epochs": args.epochs,
-                "training/batch_size": args.batch_size,
-                "training/lr": args.lr,
-                "training/weight_decay": args.weight_decay,
-                "training/lr_drop": args.lr_drop,
-                "training/early_stopping_patience": args.patience,
-                "data/image_size": args.image_size,
-                "model/arch": "detr_resnet50",
-                "model/num_classes": 1,
-                "model/num_queries": 100,
-                "model/aux_loss": True,
-                "cv/n_folds": args.folds,
-                "cv/seed": args.seed,
-                "detr/loss_ce_weight": 1.0,
-                "detr/loss_bbox_weight": 5.0,
-                "detr/loss_giou_weight": 2.0,
-                "detr/eos_coef": 0.1,
-                "detr/matcher_cost_class": 1.0,
-                "detr/matcher_cost_bbox": 5.0,
-                "detr/matcher_cost_giou": 2.0,
-            })
+            mlflow.log_params(
+                {
+                    "training/epochs": args.epochs,
+                    "training/batch_size": args.batch_size,
+                    "training/lr": args.lr,
+                    "training/weight_decay": args.weight_decay,
+                    "training/lr_drop": args.lr_drop,
+                    "training/early_stopping_patience": args.patience,
+                    "data/image_size": args.image_size,
+                    "model/arch": "detr_resnet50",
+                    "model/num_classes": 1,
+                    "model/num_queries": 100,
+                    "model/aux_loss": True,
+                    "cv/n_folds": args.folds,
+                    "cv/seed": args.seed,
+                    "detr/loss_ce_weight": 1.0,
+                    "detr/loss_bbox_weight": 5.0,
+                    "detr/loss_giou_weight": 2.0,
+                    "detr/eos_coef": 0.1,
+                    "detr/matcher_cost_class": 1.0,
+                    "detr/matcher_cost_bbox": 5.0,
+                    "detr/matcher_cost_giou": 2.0,
+                }
+            )
 
         # Reset VRAM tracking per fold
         if torch.cuda.is_available():

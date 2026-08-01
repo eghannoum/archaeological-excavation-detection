@@ -77,9 +77,9 @@ import warnings
 warnings.filterwarnings("ignore", message=".*ShiftScaleRotate.*Affine.*")
 warnings.filterwarnings("ignore", message=".*Argument.*not valid.*")
 
-import logging
-import os
-from typing import Any, Optional
+import logging  # noqa: E402  # intentional: imports after filterwarnings setup
+import os  # noqa: E402
+from typing import Any  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -103,16 +103,18 @@ except ImportError:  # pragma: no cover
     )
 
 # ---------------------------------------------------------------------------
-# Pipeline builders — exact transform specs from configs/augmentation/{light,heavy}.yaml
+# Pipeline builders — transforms are defined here in Python.
+# The configs/augmentation/{light,heavy}.yaml files only hold mode
+# settings (enabled/mode/ultralytics); they no longer list transforms.
 # ---------------------------------------------------------------------------
 
 
 def _light_transforms() -> list[A.BasicTransform]:
     """Return the list of light Albumentations transforms.
 
-    Matches ``configs/augmentation/light.yaml`` exactly.
-    All transforms use explicit ``p=`` probability
-    (never ``always_apply=True``).
+    The light profile is defined in Python (not in YAML) to keep the
+    transform specs in one place with type-checked parameters.  All
+    transforms use explicit ``p=`` probability (never ``always_apply=True``).
     """
     return [
         A.HorizontalFlip(p=0.5),
@@ -126,7 +128,8 @@ def _heavy_transforms() -> list[A.BasicTransform]:
     """Return the list of heavy Albumentations transforms.
 
     Includes all light transforms plus spatial and noise-based augmentations.
-    Matches ``configs/augmentation/heavy.yaml`` exactly.
+    The heavy profile is defined in Python (not in YAML); the YAML files
+    only hold mode settings.
     """
     return [
         # ── Light transforms (included) ──────────────────────────────
@@ -165,7 +168,7 @@ def _heavy_transforms() -> list[A.BasicTransform]:
 # ---------------------------------------------------------------------------
 
 
-def get_pipeline(mode: str = "light") -> Optional[Compose]:
+def get_pipeline(mode: str = "light") -> Compose | None:
     """Return an Albumentations ``Compose`` pipeline for the given *mode*.
 
     Parameters
@@ -205,8 +208,7 @@ def get_pipeline(mode: str = "light") -> Optional[Compose]:
         transforms = _heavy_transforms()
     else:
         raise ValueError(
-            f"Unknown augmentation mode: {mode!r}. "
-            f"Expected one of: 'light', 'heavy', 'none'."
+            f"Unknown augmentation mode: {mode!r}. " f"Expected one of: 'light', 'heavy', 'none'."
         )
 
     return A.Compose(
@@ -335,11 +337,7 @@ def patch_yolodataset(mode: str = "light") -> None:
     def _patched_build_transforms(self, hyp=None):
         # Inject our Albumentations transforms into hyp so that Ultralytics'
         # built-in Albumentations step in v8_transforms picks them up.
-        if (
-            self.augment
-            and _AUGMENTATION_MODE not in ("none", "")
-            and hyp is not None
-        ):
+        if self.augment and _AUGMENTATION_MODE not in ("none", "") and hyp is not None:
             pipeline = get_pipeline(_AUGMENTATION_MODE)
             if pipeline is not None:
                 try:

@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import mlflow
 from mlflow.entities import Run
@@ -49,7 +49,7 @@ os.environ.setdefault("MLFLOW_ARTIFACT_URI", _MLRUNS_DIR.as_uri())
 # ---------------------------------------------------------------------------
 
 
-def init_experiment(experiment_name: str, tags: Dict[str, str]) -> str:
+def init_experiment(experiment_name: str, tags: dict[str, str]) -> str:
     """Create or retrieve an MLflow experiment, set tags, return experiment ID.
 
     Args:
@@ -86,7 +86,7 @@ def log_config(cfg: Any) -> None:
     flat = _flatten_config(cfg)
     # Keep only truthy values that are useful for search.
     # 0, False, and empty strings are still logged so that they can be filtered.
-    filtered: Dict[str, Any] = {}
+    filtered: dict[str, Any] = {}
     for k, v in flat.items():
         if v is None:
             continue  # skip null leaves
@@ -102,7 +102,7 @@ def log_config(cfg: Any) -> None:
     mlflow.log_params(filtered)
 
 
-def log_metrics(metrics_dict: Dict[str, float], step: Optional[int] = None) -> None:
+def log_metrics(metrics_dict: dict[str, float], step: int | None = None) -> None:
     """Log a dictionary of metrics, optionally at a specific step / epoch.
 
     Args:
@@ -143,7 +143,7 @@ def log_model_checkpoint(path: str, name: str = "model") -> None:
     mlflow.log_artifact(str(p), artifact_path=name)
 
 
-def get_run_metrics(run_id: str) -> Dict[str, float]:
+def get_run_metrics(run_id: str) -> dict[str, float]:
     """Retrieve the latest value of every metric logged under a run.
 
     Args:
@@ -167,7 +167,7 @@ def _flatten_config(
     *,
     parent_key: str = "",
     sep: str = "/",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Recursively flatten an OmegaConf / DictConfig to a key-value dictionary.
 
     Leaf values that are lists are converted to comma-separated strings.
@@ -182,7 +182,7 @@ def _flatten_config(
         Flattened dictionary.
     """
     resolved = OmegaConf.to_container(cfg, resolve=True)
-    items: Dict[str, Any] = {}
+    items: dict[str, Any] = {}
 
     def _recurse(obj: Any, prefix: str) -> None:
         if isinstance(obj, dict):
@@ -299,7 +299,7 @@ def _extract_experiment_type(cfg: Any) -> str:
     return "training"
 
 
-def _build_taxonomy_tags(cfg: Any) -> Dict[str, str]:
+def _build_taxonomy_tags(cfg: Any) -> dict[str, str]:
     """Construct the 6 mandatory MLflow taxonomy tags from a Hydra config.
 
     Returns
@@ -382,8 +382,8 @@ def init_mlflow(cfg: Any) -> str:
 
 def finish_mlflow(
     run_id: str,
-    metrics: Optional[Dict[str, float]] = None,
-    model_path: Optional[str] = None,
+    metrics: dict[str, float] | None = None,
+    model_path: str | None = None,
 ) -> None:
     """Finalise an MLflow run: log final metrics, model checkpoint, and close.
 

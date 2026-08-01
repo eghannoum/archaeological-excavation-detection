@@ -42,6 +42,7 @@ Integration with ``configs/hpo/default.yaml``
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 import re
@@ -49,7 +50,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import hydra
 import mlflow
@@ -85,28 +86,24 @@ logger = logging.getLogger(__name__)
 # The ``config_override_key`` tells _build_overrides() how to emit a Hydra
 # CLI override string.
 
-SEARCH_SPACE: List[Tuple[str, str, Any, Any, str]] = [
+SEARCH_SPACE: list[tuple[str, str, Any, Any, str]] = [
     # ── Optimiser hyper-parameters ──────────────────────────────────
-    ("lr",           "log-uniform", [1e-4, 1e-2],      0.001,  "training.lr"),
-    ("momentum",     "uniform",     [0.8, 0.95],        0.937,  "training.momentum"),
-    ("weight_decay", "log-uniform", [1e-5, 1e-3],      0.0005, "training.weight_decay"),
-    ("optimizer",    "categorical", ["AdamW", "SGD"],   "AdamW","training.optimizer"),
-
+    ("lr", "log-uniform", [1e-4, 1e-2], 0.001, "training.lr"),
+    ("momentum", "uniform", [0.8, 0.95], 0.937, "training.momentum"),
+    ("weight_decay", "log-uniform", [1e-5, 1e-3], 0.0005, "training.weight_decay"),
+    ("optimizer", "categorical", ["AdamW", "SGD"], "AdamW", "training.optimizer"),
     # ── LR schedule ─────────────────────────────────────────────────
-    ("warmup_epochs","int",         [0, 5],             3,      "training.scheduler.warmup_epochs"),
-    ("cos_lr",       "categorical", [True, False],      True,   "__special__cos_lr"),
-
+    ("warmup_epochs", "int", [0, 5], 3, "training.scheduler.warmup_epochs"),
+    ("cos_lr", "categorical", [True, False], True, "__special__cos_lr"),
     # ── Ultralytics colour-space augmentation ───────────────────────
-    ("hsv_h",        "uniform",     [0.0, 0.1],         0.015,  "augmentation.ultralytics.hsv_h"),
-    ("hsv_s",        "uniform",     [0.0, 0.9],         0.7,    "augmentation.ultralytics.hsv_s"),
-    ("hsv_v",        "uniform",     [0.0, 0.9],         0.4,    "augmentation.ultralytics.hsv_v"),
-
+    ("hsv_h", "uniform", [0.0, 0.1], 0.015, "augmentation.ultralytics.hsv_h"),
+    ("hsv_s", "uniform", [0.0, 0.9], 0.7, "augmentation.ultralytics.hsv_s"),
+    ("hsv_v", "uniform", [0.0, 0.9], 0.4, "augmentation.ultralytics.hsv_v"),
     # ── Ultralytics geometric augmentation ──────────────────────────
-    ("degrees",      "uniform",     [0.0, 45.0],        0.0,    "augmentation.ultralytics.degrees"),
-
+    ("degrees", "uniform", [0.0, 45.0], 0.0, "augmentation.ultralytics.degrees"),
     # ── Ultralytics mosaic & mixup ──────────────────────────────────
-    ("mosaic",       "categorical", [0.0, 0.5, 1.0],    1.0,    "augmentation.ultralytics.mosaic"),
-    ("mixup",        "categorical", [0.0, 0.5, 1.0],    0.0,    "augmentation.ultralytics.mixup"),
+    ("mosaic", "categorical", [0.0, 0.5, 1.0], 1.0, "augmentation.ultralytics.mosaic"),
+    ("mixup", "categorical", [0.0, 0.5, 1.0], 0.0, "augmentation.ultralytics.mixup"),
 ]
 
 # Human-readable header for dry-run mode
@@ -119,7 +116,7 @@ _DRY_RUN_TABLE_HEADER = (
 _MODEL_NAME_RE = re.compile(r"^(yolo\d+|yolov\d+)([nmslx])$")
 
 
-def _parse_model_name(model_name: str) -> Tuple[str, str]:
+def _parse_model_name(model_name: str) -> tuple[str, str]:
     """Extract (family, scale) from a YOLO model name.
 
     Examples::
@@ -143,7 +140,7 @@ _MAP50_RE = re.compile(
     r"([\d.]+(?:e[+-]?\d+)?)\s+"  # 1 — Precision
     r"([\d.]+(?:e[+-]?\d+)?)\s+"  # 2 — Recall
     r"([\d.]+(?:e[+-]?\d+)?)\s+"  # 3 — mAP50  ←  target
-    r"([\d.]+(?:e[+-]?\d+)?)"     # 4 — mAP50-95
+    r"([\d.]+(?:e[+-]?\d+)?)"  # 4 — mAP50-95
 )
 
 # Post-hoc regex: match "val/mAP50: 0.1234" in full output after proc.wait()
@@ -158,12 +155,12 @@ _EPOCH_RE = re.compile(r"^\s*(\d+)/(\d+)")
 # ---------------------------------------------------------------------------
 
 
-def _suggest_params(trial: optuna.trial.Trial) -> Dict[str, Any]:
+def _suggest_params(trial: optuna.trial.Trial) -> dict[str, Any]:
     """Suggest one hyper-parameter value for each entry in :data:`SEARCH_SPACE`.
 
     Returns a flat dict suitable for :func:`_build_overrides`.
     """
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
     for name, stype, range_or_values, _default, _override_key in SEARCH_SPACE:
         if stype == "log-uniform":
             lo, hi = range_or_values
@@ -210,7 +207,7 @@ def _get_default_value(name: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _build_overrides(params: Dict[str, Any], trial_epochs: int) -> List[str]:
+def _build_overrides(params: dict[str, Any], trial_epochs: int) -> list[str]:
     """Translate a flat ``{param_name: value}`` dict into Hydra CLI overrides.
 
     The returned list is meant to be appended to a ``python scripts/train.py
@@ -221,7 +218,7 @@ def _build_overrides(params: Dict[str, Any], trial_epochs: int) -> List[str]:
     * ``cos_lr`` → ``training.scheduler.name``  (``True`` → ``"cosine"``,
       ``False`` → ``"linear"``)
     """
-    overrides: List[str] = [
+    overrides: list[str] = [
         f"training.lr={params['lr']}",
         f"training.momentum={params['momentum']}",
         f"training.weight_decay={params['weight_decay']}",
@@ -245,7 +242,7 @@ def _build_overrides(params: Dict[str, Any], trial_epochs: int) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def _parse_map50_line(line: str) -> Optional[float]:
+def _parse_map50_line(line: str) -> float | None:
     """Extract ``val/mAP50`` from a single stdout line if it contains one.
 
     Returns ``None`` when the line does not carry a validation metric.
@@ -298,12 +295,16 @@ def _print_search_space(cfg: DictConfig) -> None:
     print(f"  Target metric:         {hpo.target_metric}")
     print(f"  n_trials:              {hpo.n_trials}")
     print(f"  Trial epochs:          {hpo.get('trial_epochs', 30)}")
-    print(f"  Sampler:               TPESampler(seed={hpo.sampler.seed}, "
-          f"n_startup_trials={hpo.sampler.n_startup_trials}, "
-          f"n_ei_candidates={hpo.sampler.n_ei_candidates})")
-    print(f"  Pruner:                MedianPruner(n_startup_trials={hpo.pruner.n_startup_trials}, "
-          f"n_warmup_steps={hpo.pruner.n_warmup_steps}, "
-          f"interval_steps={hpo.pruner.interval_steps})")
+    print(
+        f"  Sampler:               TPESampler(seed={hpo.sampler.seed}, "
+        f"n_startup_trials={hpo.sampler.n_startup_trials}, "
+        f"n_ei_candidates={hpo.sampler.n_ei_candidates})"
+    )
+    print(
+        f"  Pruner:                MedianPruner(n_startup_trials={hpo.pruner.n_startup_trials}, "
+        f"n_warmup_steps={hpo.pruner.n_warmup_steps}, "
+        f"interval_steps={hpo.pruner.interval_steps})"
+    )
     print(f"  Storage:               {hpo.storage or 'in-memory'}")
     print("  Batch size:            8 (training — conservative per GPU benchmark)")
     print()
@@ -313,8 +314,10 @@ def _print_search_space(cfg: DictConfig) -> None:
     print("-" * 80)
     print(f"  Tracking URI:          {TRACKING_URI}")
     print(f"  Experiment:            {exp_name}-hpo")
-    print(f"  Study tags:            experiment_type=hpo, "
-          f"model_family={model_family}, model_scale={model_scale}")
+    print(
+        f"  Study tags:            experiment_type=hpo, "
+        f"model_family={model_family}, model_scale={model_scale}"
+    )
     print()
 
     print("-" * 80)
@@ -322,9 +325,8 @@ def _print_search_space(cfg: DictConfig) -> None:
     print("-" * 80)
     example_params = {name: _get_default_value(name) for name, _, _, _, _ in SEARCH_SPACE}
     example_overrides = _build_overrides(example_params, trial_epochs=hpo.get("trial_epochs", 30))
-    cmd = (
-        f"  python scripts/train.py experiment={exp_name} \\\n"
-        + " \\\n".join(f"    {o}" for o in example_overrides)
+    cmd = f"  python scripts/train.py experiment={exp_name} \\\n" + " \\\n".join(
+        f"    {o}" for o in example_overrides
     )
     print(cmd)
     print()
@@ -401,7 +403,7 @@ def objective(
     trial: optuna.trial.Trial,
     cfg: DictConfig,
     trial_epochs: int,
-    study_run_id: Optional[str],
+    study_run_id: str | None,
 ) -> float:
     """Optuna objective — train YOLO26m with suggested hyper-parameters.
 
@@ -436,8 +438,7 @@ def objective(
 
     # --- 2. MLflow trial run -------------------------------------------------
     parent_active = study_run_id is not None and (
-        mlflow.active_run() is not None
-        and mlflow.active_run().info.run_id == study_run_id
+        mlflow.active_run() is not None and mlflow.active_run().info.run_id == study_run_id
     )
 
     if parent_active:
@@ -500,7 +501,7 @@ def objective(
         _hpo_stdout = proc.stdout
         if sys.platform == "win32":
             _hpo_stdout = io.TextIOWrapper(proc.stdout.buffer, encoding="utf-8", errors="replace")
-        _hpo_lines: List[str] = []  # buffer for post-hoc extraction
+        _hpo_lines: list[str] = []  # buffer for post-hoc extraction
         for line in _hpo_stdout:
             _hpo_lines.append(line)
             sys.stdout.write(line)
@@ -572,10 +573,12 @@ def objective(
             mlflow.set_tag("trial_status", "failed")
             mlflow.set_tag("return_code", str(returncode))
         else:
-            mlflow.log_metrics({
-                "val/mAP50": final_mAP,
-                "duration_secs": round(duration_secs, 1),
-            })
+            mlflow.log_metrics(
+                {
+                    "val/mAP50": final_mAP,
+                    "duration_secs": round(duration_secs, 1),
+                }
+            )
             mlflow.set_tag("trial_status", "completed")
             mlflow.set_tag("return_code", str(returncode))
             logger.info(
@@ -588,10 +591,8 @@ def objective(
         logger.exception("Trial %d — MLflow logging failed", trial.number)
 
     # --- 6. End trial MLflow run --------------------------------------------
-    try:
+    with contextlib.suppress(Exception):
         mlflow.end_run()  # ends the trial-level run (nested or independent)
-    except Exception:
-        pass
 
     return final_mAP
 
@@ -606,8 +607,8 @@ def run_study(
     *,
     dry_run: bool = False,
     n_jobs: int = 1,
-    n_trials: Optional[int] = None,
-) -> Optional[optuna.study.Study]:
+    n_trials: int | None = None,
+) -> optuna.study.Study | None:
     """Run a full Optuna hyper-parameter optimisation study.
 
     Parameters
@@ -647,7 +648,9 @@ def run_study(
     logger.info("  Trial epochs:      %d", trial_epochs)
     logger.info("  Parallel (n_jobs): %d", n_jobs)
     logger.info("  Experiment:        %s", experiment_name)
-    logger.info("  Model:             %s (family=%s, scale=%s)", model_name, model_family, model_scale)
+    logger.info(
+        "  Model:             %s (family=%s, scale=%s)", model_name, model_family, model_scale
+    )
     logger.info("=" * 60)
 
     # ------------------------------------------------------------------
@@ -675,10 +678,15 @@ def run_study(
     mlflow.log_param("n_jobs", n_jobs)
     mlflow.log_param("sampler", f"TPESampler(seed={cfg.hpo.sampler.seed})")
     mlflow.log_param("pruner", f"MedianPruner(n_startup={cfg.hpo.pruner.n_startup_trials})")
-    mlflow.log_param("search_space", OmegaConf.to_yaml(
-        {name: {"type": stype, "range": _format_range(stype, rng)}
-         for name, stype, rng, _default, _key in SEARCH_SPACE}
-    ))
+    mlflow.log_param(
+        "search_space",
+        OmegaConf.to_yaml(
+            {
+                name: {"type": stype, "range": _format_range(stype, rng)}
+                for name, stype, rng, _default, _key in SEARCH_SPACE
+            }
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Optuna study
@@ -749,10 +757,8 @@ def run_study(
     # ------------------------------------------------------------------
     # Cleanup MLflow
     # ------------------------------------------------------------------
-    try:
+    with contextlib.suppress(Exception):
         mlflow.end_run()  # end the study-level run
-    except Exception:
-        pass
 
     return study
 
@@ -784,7 +790,9 @@ def _log_study_results(study: optuna.study.Study, study_run_id: str) -> None:
     logger.info("STUDY RESULTS  --  %s", study.study_name)
     logger.info("  Completed: %d  |  Pruned: %d  |  Failed: %d", completed, pruned, failed)
     if study.best_trial and study.best_trial.value is not None:
-        logger.info("  Best trial:  #%d  (mAP50=%.4f)", study.best_trial.number, study.best_trial.value)
+        logger.info(
+            "  Best trial:  #%d  (mAP50=%.4f)", study.best_trial.number, study.best_trial.value
+        )
         for key, value in study.best_trial.params.items():
             logger.info("    %s: %s", key, value)
     logger.info("-" * 50)
@@ -814,7 +822,7 @@ def _log_study_results(study: optuna.study.Study, study_run_id: str) -> None:
 # Module-level globals for CLI args parsed *before* @hydra.main processes argv.
 _HPO_DRY_RUN = False
 _HPO_N_JOBS = 1
-_HPO_N_TRIALS: Optional[int] = None
+_HPO_N_TRIALS: int | None = None
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="default")

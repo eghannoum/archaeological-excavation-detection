@@ -10,9 +10,7 @@ from ultralytics import YOLO
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Evaluate trained YOLO26m hole detection model"
-    )
+    parser = argparse.ArgumentParser(description="Evaluate trained YOLO26m hole detection model")
     parser.add_argument(
         "--model",
         default="runs/train/yolo26m-hole/weights/best.pt",
@@ -116,9 +114,15 @@ def main() -> None:
     if hasattr(results, "ap_class_index") and hasattr(results, "maps"):
         maps = results.maps
         for cls_idx, cls_id in enumerate(results.ap_class_index):
-            class_name = results.names.get(cls_id, str(cls_id)) if hasattr(results, "names") else str(cls_id)
+            class_name = (
+                results.names.get(cls_id, str(cls_id)) if hasattr(results, "names") else str(cls_id)
+            )
             per_class[class_name] = {
-                "mAP50": float(maps[cls_idx]) if cls_idx < len(maps) and maps[cls_idx] is not None else None,
+                "mAP50": (
+                    float(maps[cls_idx])
+                    if cls_idx < len(maps) and maps[cls_idx] is not None
+                    else None
+                ),
             }
 
     # --- Save results.json ---
@@ -149,11 +153,15 @@ def main() -> None:
             cm_path = candidate
 
     # If still not found, try to generate one via model.val's built-in confusion matrix
-    if cm_path is None and hasattr(results, "confusion_matrix") and results.confusion_matrix is not None:
+    if (
+        cm_path is None
+        and hasattr(results, "confusion_matrix")
+        and results.confusion_matrix is not None
+    ):
         try:
             import matplotlib.pyplot as plt
-            import seaborn as sns
             import numpy as np
+            import seaborn as sns
 
             cm = results.confusion_matrix
             plt.figure(figsize=(8, 7))
@@ -179,13 +187,13 @@ def main() -> None:
     else:
         print(f"Confusion matrix available at {cm_path}")
 
-    if cm_path is not None:
-        if cm_path != output_dir / "confusion_matrix.png":
-            # Copy/rename to output dir
-            import shutil
-            dest = output_dir / "confusion_matrix.png"
-            shutil.copy2(str(cm_path), str(dest))
-            print(f"Confusion matrix copied to {dest}")
+    if cm_path is not None and cm_path != output_dir / "confusion_matrix.png":
+        # Copy/rename to output dir
+        import shutil
+
+        dest = output_dir / "confusion_matrix.png"
+        shutil.copy2(str(cm_path), str(dest))
+        print(f"Confusion matrix copied to {dest}")
 
     # --- Print summary ---
     sep = "─" * 45

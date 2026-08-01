@@ -1,194 +1,247 @@
-import mlflow
-import pandas as pd
-import numpy as np
 import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from pathlib import Path
+import mlflow
+import numpy as np
+import pandas as pd
+
+matplotlib.use("Agg")
 import warnings
-warnings.filterwarnings('ignore')
+from pathlib import Path
 
-PROJECT_ROOT = Path(r'C:\Users\eghan\Desktop\self study courses\Projects\STI-Unauthorized-Archaeological-Excavations')
-PLOTS_DIR = PROJECT_ROOT / 'docs' / 'hpo-plots'
-PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-REPORT_PATH = PROJECT_ROOT / 'docs' / 'hpo-analysis.md'
+import matplotlib.pyplot as plt
 
-mlflow.set_tracking_uri('sqlite:///mlruns/mlflow.db')
-exp = mlflow.get_experiment_by_name('yolo26m-hpo')
-runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
-trial_runs = runs[runs['tags.trial_status'].notna()].copy()
-completed = trial_runs[trial_runs['tags.trial_status'] == 'completed'].copy()
+warnings.filterwarnings("ignore")
 
-completed['metrics.val/mAP50'] = pd.to_numeric(completed['metrics.val/mAP50'], errors='coerce')
-completed = completed.dropna(subset=['metrics.val/mAP50']).copy()
-completed['trial_number'] = completed['tags.mlflow.runName'].str.extract(r'(\d+)').astype(int)
-completed = completed.sort_values('trial_number')
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PLOTS_DIR = PROJECT_ROOT / "docs" / "hpo-plots"
+REPORT_PATH = PROJECT_ROOT / "docs" / "hpo-analysis.md"
 
-print(f'Completed trials: {len(completed)}')
 
-param_cols = sorted([c for c in completed.columns if c.startswith('params.params/')])
+def main():
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# 1. Parameter Importance
-numeric_params = ['lr', 'momentum', 'weight_decay', 'warmup_epochs', 'hsv_h', 'hsv_s', 'hsv_v', 'degrees', 'mosaic', 'mixup']
-categorical_params = ['optimizer', 'cos_lr']
+    mlflow.set_tracking_uri("sqlite:///mlruns/mlflow.db")
+    exp = mlflow.get_experiment_by_name("yolo26m-hpo")
+    runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
+    trial_runs = runs[runs["tags.trial_status"].notna()].copy()
+    completed = trial_runs[trial_runs["tags.trial_status"] == "completed"].copy()
 
-importance_data = []
-for pname in numeric_params:
-    col = f'params.params/{pname}'
-    if col in completed.columns:
-        vals = pd.to_numeric(completed[col], errors='coerce')
-        corr = vals.corr(completed['metrics.val/mAP50'], method='spearman')
-        importance_data.append({'param': pname, 'correlation': corr, 'abs_corr': abs(corr)})
+    completed["metrics.val/mAP50"] = pd.to_numeric(completed["metrics.val/mAP50"], errors="coerce")
+    completed = completed.dropna(subset=["metrics.val/mAP50"]).copy()
+    completed["trial_number"] = completed["tags.mlflow.runName"].str.extract(r"(\d+)").astype(int)
+    completed = completed.sort_values("trial_number")
 
-default_map50 = 0.3197
-best_map50 = completed['metrics.val/mAP50'].max()
+    print(f"Completed trials: {len(completed)}")
 
-# 2. Optimization History
-fig, ax = plt.subplots(figsize=(12, 6))
-trial_nums = completed['trial_number'].values
-map50_vals = completed['metrics.val/mAP50'].values
-best_so_far = np.maximum.accumulate(map50_vals)
+    # 1. Parameter Importance
+    numeric_params = [
+        "lr",
+        "momentum",
+        "weight_decay",
+        "warmup_epochs",
+        "hsv_h",
+        "hsv_s",
+        "hsv_v",
+        "degrees",
+        "mosaic",
+        "mixup",
+    ]
+    categorical_params = ["optimizer", "cos_lr"]
 
-ax.plot(trial_nums, map50_vals, 'o-', color='#2196F3', alpha=0.6, markersize=4, label='Trial mAP50')
-ax.plot(trial_nums, best_so_far, '-', color='#FF5722', linewidth=2, label='Best so far')
+    importance_data = []
+    for pname in numeric_params:
+        col = f"params.params/{pname}"
+        if col in completed.columns:
+            vals = pd.to_numeric(completed[col], errors="coerce")
+            corr = vals.corr(completed["metrics.val/mAP50"], method="spearman")
+            importance_data.append({"param": pname, "correlation": corr, "abs_corr": abs(corr)})
 
-best_idx = np.argmax(map50_vals)
-ax.scatter([trial_nums[best_idx]], [map50_vals[best_idx]], color='#FF5722', s=120, zorder=5, edgecolors='black', linewidth=1.5, label=f'Best: trial-{trial_nums[best_idx]}')
-ax.axhline(y=default_map50, color='gray', linestyle='--', alpha=0.7, label=f'Default ({default_map50})')
-ax.set_xlabel('Trial Number', fontsize=12)
-ax.set_ylabel('Validation mAP50', fontsize=12)
-ax.set_title('HPO Optimization History - YOLO26m', fontsize=14, fontweight='bold')
-ax.legend(fontsize=10)
-ax.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig(str(PLOTS_DIR / 'optimization_history.png'), dpi=150, bbox_inches='tight')
-plt.close()
-print('optimization_history.png saved')
+    default_map50 = 0.3197
+    best_map50 = completed["metrics.val/mAP50"].max()
 
-# 3. Parallel Coordinate Plot
-plot_data = completed[['trial_number', 'metrics.val/mAP50'] + [f'params.params/{p}' for p in numeric_params]].copy()
-for p in numeric_params:
-    col = f'params.params/{p}'
-    plot_data[col] = pd.to_numeric(plot_data[col], errors='coerce')
+    # 2. Optimization History
+    fig, ax = plt.subplots(figsize=(12, 6))
+    trial_nums = completed["trial_number"].values
+    map50_vals = completed["metrics.val/mAP50"].values
+    best_so_far = np.maximum.accumulate(map50_vals)
 
-norm_data = plot_data.copy()
-param_dims = []
-param_labels = []
-for p in numeric_params:
-    col = f'params.params/{p}'
-    if col in norm_data.columns:
-        mn, mx = norm_data[col].min(), norm_data[col].max()
-        if mx > mn:
-            norm_data[f'{p}_norm'] = (norm_data[col] - mn) / (mx - mn)
+    ax.plot(
+        trial_nums, map50_vals, "o-", color="#2196F3", alpha=0.6, markersize=4, label="Trial mAP50"
+    )
+    ax.plot(trial_nums, best_so_far, "-", color="#FF5722", linewidth=2, label="Best so far")
+
+    best_idx = np.argmax(map50_vals)
+    ax.scatter(
+        [trial_nums[best_idx]],
+        [map50_vals[best_idx]],
+        color="#FF5722",
+        s=120,
+        zorder=5,
+        edgecolors="black",
+        linewidth=1.5,
+        label=f"Best: trial-{trial_nums[best_idx]}",
+    )
+    ax.axhline(
+        y=default_map50, color="gray", linestyle="--", alpha=0.7, label=f"Default ({default_map50})"
+    )
+    ax.set_xlabel("Trial Number", fontsize=12)
+    ax.set_ylabel("Validation mAP50", fontsize=12)
+    ax.set_title("HPO Optimization History - YOLO26m", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(str(PLOTS_DIR / "optimization_history.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("optimization_history.png saved")
+
+    # 3. Parallel Coordinate Plot
+    plot_data = completed[
+        ["trial_number", "metrics.val/mAP50"] + [f"params.params/{p}" for p in numeric_params]
+    ].copy()
+    for p in numeric_params:
+        col = f"params.params/{p}"
+        plot_data[col] = pd.to_numeric(plot_data[col], errors="coerce")
+
+    norm_data = plot_data.copy()
+    param_dims = []
+    param_labels = []
+    for p in numeric_params:
+        col = f"params.params/{p}"
+        if col in norm_data.columns:
+            mn, mx = norm_data[col].min(), norm_data[col].max()
+            if mx > mn:
+                norm_data[f"{p}_norm"] = (norm_data[col] - mn) / (mx - mn)
+            else:
+                norm_data[f"{p}_norm"] = 0.5
+            param_dims.append(f"{p}_norm")
+            param_labels.append(p)
+
+    fig, ax = plt.subplots(figsize=(16, 6))
+    x_positions = list(range(len(param_dims)))
+    map_vals = norm_data["metrics.val/mAP50"].values
+    vmin, vmax = map_vals.min(), map_vals.max()
+    cmap = plt.cm.viridis
+    for i in range(len(norm_data)):
+        y_vals = [norm_data.iloc[i][d] for d in param_dims]
+        color_val = (map_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
+        ax.plot(x_positions, y_vals, color=cmap(color_val), alpha=0.4, linewidth=0.8)
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(param_labels, fontsize=10)
+    ax.set_xlim(-0.5, len(param_dims) - 0.5)
+    ax.set_ylabel("Normalized Value", fontsize=12)
+    ax.set_title(
+        "Parallel Coordinate Plot - Parameter Interactions (colored by mAP50)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    plt.colorbar(sm, ax=ax, shrink=0.8, label="mAP50")
+    plt.tight_layout()
+    plt.savefig(str(PLOTS_DIR / "parallel_coordinates.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("parallel_coordinates.png saved")
+
+    # 4. Slice Plots
+    importance_df = pd.DataFrame(importance_data).sort_values("abs_corr", ascending=False)
+    top_params = importance_df.head(6)["param"].tolist()
+
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    axes = axes.flatten()
+
+    for i, pname in enumerate(top_params):
+        ax = axes[i]
+        col = f"params.params/{pname}"
+        vals = pd.to_numeric(completed[col], errors="coerce")
+        ax.scatter(
+            vals,
+            completed["metrics.val/mAP50"],
+            c=completed["metrics.val/mAP50"],
+            cmap="viridis",
+            alpha=0.7,
+            s=40,
+            edgecolors="black",
+            linewidth=0.5,
+        )
+        mask = ~(vals.isna() | completed["metrics.val/mAP50"].isna())
+        if mask.sum() > 2:
+            z = np.polyfit(vals[mask], completed.loc[mask, "metrics.val/mAP50"], 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(vals[mask].min(), vals[mask].max(), 100)
+            ax.plot(x_line, p(x_line), "--", color="#FF5722", alpha=0.8, linewidth=1.5)
+        ax.set_xlabel(pname, fontsize=11)
+        ax.set_ylabel("mAP50", fontsize=11)
+        ax.set_title(
+            f'{pname} - Spearman r = {importance_df.iloc[i]["correlation"]:+.3f}', fontsize=11
+        )
+        ax.grid(True, alpha=0.3)
+
+    plt.suptitle(
+        "Slice Plots - Single-Parameter Sensitivity on mAP50", fontsize=14, fontweight="bold"
+    )
+    plt.tight_layout()
+    plt.savefig(str(PLOTS_DIR / "slice_plots.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("slice_plots.png saved")
+
+    # 5. Parameter Distributions
+    completed_sorted = completed.sort_values("metrics.val/mAP50", ascending=False)
+    top10 = completed_sorted.head(10)
+    rest = completed_sorted.iloc[10:]
+
+    all_params = numeric_params + categorical_params
+    fig, axes = plt.subplots(4, 3, figsize=(16, 14))
+    axes = axes.flatten()
+
+    for i, pname in enumerate(all_params):
+        ax = axes[i]
+        col = f"params.params/{pname}"
+        if pname in categorical_params:
+            top_counts = top10[col].value_counts()
+            rest_counts = rest[col].value_counts()
+            categories = sorted(set(list(top_counts.index) + list(rest_counts.index)))
+            x = np.arange(len(categories))
+            width = 0.35
+            top_vals = [top_counts.get(c, 0) for c in categories]
+            rest_vals = [rest_counts.get(c, 0) for c in categories]
+            ax.bar(x - width / 2, top_vals, width, label="Top 10", color="#FF5722", alpha=0.8)
+            ax.bar(x + width / 2, rest_vals, width, label="Rest", color="#2196F3", alpha=0.6)
+            ax.set_xticks(x)
+            ax.set_xticklabels(categories, fontsize=9)
         else:
-            norm_data[f'{p}_norm'] = 0.5
-        param_dims.append(f'{p}_norm')
-        param_labels.append(p)
+            top_vals_num = pd.to_numeric(top10[col], errors="coerce")
+            rest_vals_num = pd.to_numeric(rest[col], errors="coerce")
+            ax.hist(
+                [top_vals_num.dropna(), rest_vals_num.dropna()],
+                bins=15,
+                label=["Top 10", "Rest"],
+                color=["#FF5722", "#2196F3"],
+                alpha=0.6,
+            )
+        ax.set_xlabel(pname, fontsize=10)
+        ax.set_ylabel("Count", fontsize=10)
+        ax.set_title(pname, fontsize=11, fontweight="bold")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
 
-fig, ax = plt.subplots(figsize=(16, 6))
-x_positions = list(range(len(param_dims)))
-map_vals = norm_data['metrics.val/mAP50'].values
-vmin, vmax = map_vals.min(), map_vals.max()
-cmap = plt.cm.viridis
-for i in range(len(norm_data)):
-    y_vals = [norm_data.iloc[i][d] for d in param_dims]
-    color_val = (map_vals[i] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
-    ax.plot(x_positions, y_vals, color=cmap(color_val), alpha=0.4, linewidth=0.8)
+    plt.suptitle("Parameter Distributions - Top 10 Trials vs Rest", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(str(PLOTS_DIR / "param_distributions.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("param_distributions.png saved")
 
-ax.set_xticks(x_positions)
-ax.set_xticklabels(param_labels, fontsize=10)
-ax.set_xlim(-0.5, len(param_dims) - 0.5)
-ax.set_ylabel('Normalized Value', fontsize=12)
-ax.set_title('Parallel Coordinate Plot - Parameter Interactions (colored by mAP50)', fontsize=14, fontweight='bold')
-sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(vmin=vmin, vmax=vmax))
-sm.set_array([])
-plt.colorbar(sm, ax=ax, shrink=0.8, label='mAP50')
-plt.tight_layout()
-plt.savefig(str(PLOTS_DIR / 'parallel_coordinates.png'), dpi=150, bbox_inches='tight')
-plt.close()
-print('parallel_coordinates.png saved')
+    # 6. Generate Report
+    best_trial_num = int(completed.loc[completed["metrics.val/mAP50"].idxmax(), "trial_number"])
+    mean_map50 = completed["metrics.val/mAP50"].mean()
+    median_map50 = completed["metrics.val/mAP50"].median()
+    std_map50 = completed["metrics.val/mAP50"].std()
 
-# 4. Slice Plots
-importance_df = pd.DataFrame(importance_data).sort_values('abs_corr', ascending=False)
-top_params = importance_df.head(6)['param'].tolist()
+    report = f"""# HPO Analysis Report - YOLO26m
 
-fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-axes = axes.flatten()
-
-for i, pname in enumerate(top_params):
-    ax = axes[i]
-    col = f'params.params/{pname}'
-    vals = pd.to_numeric(completed[col], errors='coerce')
-    ax.scatter(vals, completed['metrics.val/mAP50'], c=completed['metrics.val/mAP50'], cmap='viridis', alpha=0.7, s=40, edgecolors='black', linewidth=0.5)
-    mask = ~(vals.isna() | completed['metrics.val/mAP50'].isna())
-    if mask.sum() > 2:
-        z = np.polyfit(vals[mask], completed.loc[mask, 'metrics.val/mAP50'], 1)
-        p = np.poly1d(z)
-        x_line = np.linspace(vals[mask].min(), vals[mask].max(), 100)
-        ax.plot(x_line, p(x_line), '--', color='#FF5722', alpha=0.8, linewidth=1.5)
-    ax.set_xlabel(pname, fontsize=11)
-    ax.set_ylabel('mAP50', fontsize=11)
-    ax.set_title(f'{pname} - Spearman r = {importance_df.iloc[i]["correlation"]:+.3f}', fontsize=11)
-    ax.grid(True, alpha=0.3)
-
-plt.suptitle('Slice Plots - Single-Parameter Sensitivity on mAP50', fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.savefig(str(PLOTS_DIR / 'slice_plots.png'), dpi=150, bbox_inches='tight')
-plt.close()
-print('slice_plots.png saved')
-
-# 5. Parameter Distributions
-completed_sorted = completed.sort_values('metrics.val/mAP50', ascending=False)
-top10 = completed_sorted.head(10)
-rest = completed_sorted.iloc[10:]
-
-all_params = numeric_params + categorical_params
-fig, axes = plt.subplots(4, 3, figsize=(16, 14))
-axes = axes.flatten()
-
-for i, pname in enumerate(all_params):
-    ax = axes[i]
-    col = f'params.params/{pname}'
-    if pname in categorical_params:
-        top_counts = top10[col].value_counts()
-        rest_counts = rest[col].value_counts()
-        categories = sorted(set(list(top_counts.index) + list(rest_counts.index)))
-        x = np.arange(len(categories))
-        width = 0.35
-        top_vals = [top_counts.get(c, 0) for c in categories]
-        rest_vals = [rest_counts.get(c, 0) for c in categories]
-        ax.bar(x - width/2, top_vals, width, label='Top 10', color='#FF5722', alpha=0.8)
-        ax.bar(x + width/2, rest_vals, width, label='Rest', color='#2196F3', alpha=0.6)
-        ax.set_xticks(x)
-        ax.set_xticklabels(categories, fontsize=9)
-    else:
-        top_vals_num = pd.to_numeric(top10[col], errors='coerce')
-        rest_vals_num = pd.to_numeric(rest[col], errors='coerce')
-        ax.hist([top_vals_num.dropna(), rest_vals_num.dropna()], bins=15, label=['Top 10', 'Rest'], color=['#FF5722', '#2196F3'], alpha=0.6)
-    ax.set_xlabel(pname, fontsize=10)
-    ax.set_ylabel('Count', fontsize=10)
-    ax.set_title(pname, fontsize=11, fontweight='bold')
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-
-plt.suptitle('Parameter Distributions - Top 10 Trials vs Rest', fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.savefig(str(PLOTS_DIR / 'param_distributions.png'), dpi=150, bbox_inches='tight')
-plt.close()
-print('param_distributions.png saved')
-
-# 6. Generate Report
-best_trial_num = int(completed.loc[completed['metrics.val/mAP50'].idxmax(), 'trial_number'])
-mean_map50 = completed['metrics.val/mAP50'].mean()
-median_map50 = completed['metrics.val/mAP50'].median()
-std_map50 = completed['metrics.val/mAP50'].std()
-
-report = f'''# HPO Analysis Report - YOLO26m
-
-> **Experiment:** `yolo26m-hpo`  
-> **Total Trials:** 50 completed, 0 pruned, 19 failed  
-> **Best Trial:** #{best_trial_num}  
-> **Best mAP50:** {best_map50:.4f} (default: {default_map50})  
+> **Experiment:** `yolo26m-hpo`
+> **Total Trials:** 50 completed, 0 pruned, 19 failed
+> **Best Trial:** #{best_trial_num}
+> **Best mAP50:** {best_map50:.4f} (default: {default_map50})
 > **Improvement:** +{((best_map50 - default_map50) / default_map50 * 100):.1f}%
 
 ---
@@ -214,20 +267,20 @@ The optimization history shows steady improvement across 50 trials, with the bes
 
 The table below ranks hyperparameters by Spearman rank correlation with validation mAP50.
 
-'''
+"""
 
-importance_df_sorted = importance_df.sort_values('abs_corr', ascending=False)
-report += '| Parameter | Spearman r | | Impact Direction |\n'
-report += '|-----------|-----------|-|------------------|\n'
-for _, row in importance_df_sorted.iterrows():
-    p = row['param']
-    r = row['correlation']
-    direction = 'higher -> better' if r > 0 else 'lower -> better'
-    bar_len = int(abs(r) * 30)
-    bar = '#' * bar_len + '.' * (30 - bar_len)
-    report += f'| {p:12s} | {r:+.4f} | {bar} | {direction} |\n'
+    importance_df_sorted = importance_df.sort_values("abs_corr", ascending=False)
+    report += "| Parameter | Spearman r | | Impact Direction |\n"
+    report += "|-----------|-----------|-|------------------|\n"
+    for _, row in importance_df_sorted.iterrows():
+        p = row["param"]
+        r = row["correlation"]
+        direction = "higher -> better" if r > 0 else "lower -> better"
+        bar_len = int(abs(r) * 30)
+        bar = "#" * bar_len + "." * (30 - bar_len)
+        report += f"| {p:12s} | {r:+.4f} | {bar} | {direction} |\n"
 
-report += f'''
+    report += f"""
 
 ### Key Findings
 
@@ -330,9 +383,13 @@ mixup: 1.0
 2. Fix optimizer to AdamW
 3. Fix mixup to 1.0 and mosaic to 0.5
 4. Add translate and scale to search space
-'''
+"""
 
-with open(str(REPORT_PATH), 'w', encoding='utf-8') as f:
-    f.write(report)
-print(f'Report saved to {REPORT_PATH}')
-print('ALL DONE')
+    with open(str(REPORT_PATH), "w", encoding="utf-8") as f:
+        f.write(report)
+    print(f"Report saved to {REPORT_PATH}")
+    print("ALL DONE")
+
+
+if __name__ == "__main__":
+    main()

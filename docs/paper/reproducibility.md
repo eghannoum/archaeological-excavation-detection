@@ -103,7 +103,7 @@ After CV training completes:
 
 ```bash
 # Statistical significance testing with bootstrap
-python scripts/eval_statistical_significance.py
+python paper/eval_statistical_significance.py
 ```
 
 This script:
@@ -188,13 +188,13 @@ python scripts/train.py model=yolo26m augmentation=heavy
 
 ```bash
 # Generate all metrics tables (docs/tables/)
-python scripts/generate_metrics_tables.py
+python paper/generate_metrics_tables.py
 
 # Generate all ablation tables (docs/tables/ablation/)
-python scripts/generate_ablation_tables.py
+python paper/generate_ablation_tables.py
 
 # Generate all publication figures (docs/figures/)
-python scripts/generate_publication_figures.py
+python paper/generate_publication_figures.py
 ```
 
 ---
@@ -259,7 +259,7 @@ experiments/
 | All hyperparameters documented | Done | 100 epochs, default augmentation, per-model conf thresholds |
 | Statistical significance tests | Done | Paired bootstrap, 1,000 iterations, Bonferroni correction |
 | Model weights saved | Done | 7 YOLO weights in `models/`, plus CV checkpoints in `experiments/` |
-| Evaluation scripts provided | Done | 8 scripts in `scripts/` covering all evaluation stages |
+| Evaluation scripts provided | Done | 4 general eval scripts in `scripts/` + 5 paper-specific scripts in `paper/` |
 | Bootstrap confidence intervals | Done | 95% CIs for all CV means in `significance_report.json` |
 | Significance groupings | Done | Pairwise p-values and group assignments reported |
 | Ablation studies | Done | Image size, optimizer, augmentation with single-factor variation |

@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -65,13 +66,9 @@ ENCODING_LABEL_READ = "utf-8"
 def _validate_splits(val_split: float, test_split: float) -> None:
     """Validate split fractions at parse time."""
     if not 0.0 <= val_split < 1.0:
-        raise argparse.ArgumentTypeError(
-            f"--val-split must be in [0, 1), got {val_split}"
-        )
+        raise argparse.ArgumentTypeError(f"--val-split must be in [0, 1), got {val_split}")
     if not 0.0 <= test_split < 1.0:
-        raise argparse.ArgumentTypeError(
-            f"--test-split must be in [0, 1), got {test_split}"
-        )
+        raise argparse.ArgumentTypeError(f"--test-split must be in [0, 1), got {test_split}")
     if val_split + test_split >= 1.0:
         raise argparse.ArgumentTypeError(
             f"val_split ({val_split}) + test_split ({test_split}) must be < 1.0"
@@ -168,8 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--overwrite",
         action="store_true",
         help=(
-            "If output-dir exists, delete and recreate it. "
-            "DESTRUCTIVE — safety guards apply."
+            "If output-dir exists, delete and recreate it. " "DESTRUCTIVE — safety guards apply."
         ),
     )
     parser.add_argument(
@@ -269,8 +265,7 @@ def _check_overwrite_safety(
     scripts_dir = Path("scripts").resolve()
     if resolved_out == scripts_dir:
         raise ValueError(
-            f"Output directory {resolved_out} is the scripts/ directory. "
-            "Refusing to overwrite."
+            f"Output directory {resolved_out} is the scripts/ directory. " "Refusing to overwrite."
         )
 
 
@@ -278,10 +273,11 @@ def _confirm_overwrite(output_dir: Path, yes: bool) -> None:
     """Prompt user to confirm deletion of *output_dir*."""
     if yes:
         return
-    answer = input(
-        f"WARNING: About to DELETE and recreate {output_dir.resolve()}. "
-        "Continue? (y/N): "
-    ).strip().lower()
+    answer = (
+        input(f"WARNING: About to DELETE and recreate {output_dir.resolve()}. " "Continue? (y/N): ")
+        .strip()
+        .lower()
+    )
     if answer != "y":
         print("Aborted by user.")
         sys.exit(1)
@@ -291,10 +287,8 @@ def _stale_tmp_cleanup(output_dir: Path) -> None:
     """Remove any ``*.tmp`` files left by a previous crashed run."""
     if output_dir.exists():
         for tmp in output_dir.rglob("*.tmp"):
-            try:
+            with contextlib.suppress(OSError):
                 tmp.unlink()
-            except OSError:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -443,8 +437,7 @@ def validate_parents(
                 f"{', '.join(sorted(tiles))} - expected {expected_tile_count}."
             )
         raise ValueError(
-            f"Found {len(incomplete)} incomplete/ambiguous parent(s):\n"
-            + "\n".join(lines)
+            f"Found {len(incomplete)} incomplete/ambiguous parent(s):\n" + "\n".join(lines)
         )
 
     if incomplete and allow_incomplete:
@@ -454,8 +447,8 @@ def validate_parents(
         )
         for parent_key, tiles in sorted(incomplete.items()):
             print(
-            f"  '{parent_key}': {len(tiles)}/{expected_tile_count} tiles - "
-            f"{', '.join(sorted(tiles))}"
+                f"  '{parent_key}': {len(tiles)}/{expected_tile_count} tiles - "
+                f"{', '.join(sorted(tiles))}"
             )
         # Merge incomplete back into valid since we're allowing them
         valid.update(incomplete)
@@ -606,7 +599,6 @@ def validate_bboxes(
         return 0
 
     # Build lookups
-    img_lookup: dict[int, dict] = {img["id"]: img for img in coco["images"]}
     anns_by_img: dict[int, list[dict]] = {}
     for ann in coco["annotations"]:
         anns_by_img.setdefault(ann["image_id"], []).append(ann)
@@ -696,8 +688,7 @@ def validate_bboxes(
             # Check w/h validity
             if bw <= 0 or bh <= 0:
                 print(
-                    f"\nWARNING: {filename} ann {ann['id']}: "
-                    f"skipping bbox with w={bw}, h={bh}"
+                    f"\nWARNING: {filename} ann {ann['id']}: " f"skipping bbox with w={bw}, h={bh}"
                 )
                 continue
 
@@ -714,8 +705,8 @@ def validate_bboxes(
                 if bw > img_w:
                     print(
                         f"\nWARNING: {filename} ann {ann['id']}: bbox width "
-                    f"{bw:.2f} > image width {img_w} - "
-                    f"possible xyxy format mislabeled as xywh"
+                        f"{bw:.2f} > image width {img_w} - "
+                        f"possible xyxy format mislabeled as xywh"
                     )
                     errors += 1
 
@@ -875,13 +866,10 @@ def convert_split(
             for ann in anns:
                 bbox = ann["bbox"]
                 try:
-                    nc_x, nc_y, nw, nh = coco_bbox_to_yolo(
-                        bbox, img_w, img_h, input_bbox_format
-                    )
+                    nc_x, nc_y, nw, nh = coco_bbox_to_yolo(bbox, img_w, img_h, input_bbox_format)
                 except (IndexError, TypeError, ZeroDivisionError) as exc:
                     print(
-                        f"WARNING: bbox conversion failed for {fn}, "
-                        f"ann {ann['id']}: {exc}",
+                        f"WARNING: bbox conversion failed for {fn}, " f"ann {ann['id']}: {exc}",
                         file=sys.stderr,
                     )
                     continue
@@ -916,12 +904,12 @@ def generate_data_yaml(
     # Use as_posix() for forward slashes
     lines = [
         "# Paths relative to this file's directory - run yolo train from project root",
-        f"train: images/train",
-        f"val: images/val",
+        "train: images/train",
+        "val: images/val",
     ]
     if include_test:
         lines.append("test: images/test")
-    lines.append(f"nc: 1")
+    lines.append("nc: 1")
     lines.append(f"names: ['{CLASS_NAME}']")
     return "\n".join(lines) + "\n"
 
@@ -946,9 +934,7 @@ def main() -> None:
 
     # ---------- Check output-dir requirement ----------
     if output_dir is None and not read_only_mode:
-        parser.error(
-            "--output-dir is required unless --dry-run or --validate-only is set."
-        )
+        parser.error("--output-dir is required unless --dry-run or --validate-only is set.")
     if output_dir is not None and read_only_mode:
         print(
             f"INFO: --output-dir provided but ignored in "
@@ -1012,9 +998,7 @@ def main() -> None:
         filenames.append(os.path.basename(raw))
 
     # ---------- Parse quadrant suffixes ----------
-    quadrant_suffixes = [
-        s.strip() for s in args.quadrant_suffixes.split(",") if s.strip()
-    ]
+    quadrant_suffixes = [s.strip() for s in args.quadrant_suffixes.split(",") if s.strip()]
     expected_tile_count = len(quadrant_suffixes)
 
     # ---------- Parent extraction ----------
@@ -1067,9 +1051,7 @@ def main() -> None:
             print(f"WARNING: {src} does not exist on disk.", file=sys.stderr)
             missing += 1
     if missing:
-        print(
-            f"WARNING: {missing} image(s) missing from {image_dir}.", file=sys.stderr
-        )
+        print(f"WARNING: {missing} image(s) missing from {image_dir}.", file=sys.stderr)
 
     # ---------- Bbox validation (always runs) ----------
     validation_errors = validate_bboxes(
@@ -1099,8 +1081,7 @@ def main() -> None:
     all_split_keys = set(train_keys) | set(val_keys) | set(test_keys)
     total_unique = len(train_keys) + len(val_keys) + len(test_keys)
     assert total_unique == len(all_split_keys), (
-        f"Cross-split uniqueness violation: "
-        f"{total_unique} != {len(all_split_keys)}"
+        f"Cross-split uniqueness violation: " f"{total_unique} != {len(all_split_keys)}"
     )
 
     # ---------- Dry-run mode: print summary + exit ----------
@@ -1125,44 +1106,56 @@ def main() -> None:
     (output_dir / "images").mkdir(parents=True, exist_ok=True)
     (output_dir / "labels").mkdir(parents=True, exist_ok=True)
 
-    n_train, a_train = convert_split(
-        train_keys,
-        valid_parents,
-        image_id_to_filename,
-        image_id_to_anns,
-        coco["images"],
-        image_dir,
-        output_dir,
-        "train",
-        args.input_bbox_format,
-        args.apply_exif_orientation,
-    ) if train_keys else (0, 0)
+    n_train, a_train = (
+        convert_split(
+            train_keys,
+            valid_parents,
+            image_id_to_filename,
+            image_id_to_anns,
+            coco["images"],
+            image_dir,
+            output_dir,
+            "train",
+            args.input_bbox_format,
+            args.apply_exif_orientation,
+        )
+        if train_keys
+        else (0, 0)
+    )
 
-    n_val, a_val = convert_split(
-        val_keys,
-        valid_parents,
-        image_id_to_filename,
-        image_id_to_anns,
-        coco["images"],
-        image_dir,
-        output_dir,
-        "val",
-        args.input_bbox_format,
-        args.apply_exif_orientation,
-    ) if val_keys else (0, 0)
+    n_val, a_val = (
+        convert_split(
+            val_keys,
+            valid_parents,
+            image_id_to_filename,
+            image_id_to_anns,
+            coco["images"],
+            image_dir,
+            output_dir,
+            "val",
+            args.input_bbox_format,
+            args.apply_exif_orientation,
+        )
+        if val_keys
+        else (0, 0)
+    )
 
-    n_test, a_test = convert_split(
-        test_keys,
-        valid_parents,
-        image_id_to_filename,
-        image_id_to_anns,
-        coco["images"],
-        image_dir,
-        output_dir,
-        "test",
-        args.input_bbox_format,
-        args.apply_exif_orientation,
-    ) if test_keys else (0, 0)
+    n_test, a_test = (
+        convert_split(
+            test_keys,
+            valid_parents,
+            image_id_to_filename,
+            image_id_to_anns,
+            coco["images"],
+            image_dir,
+            output_dir,
+            "test",
+            args.input_bbox_format,
+            args.apply_exif_orientation,
+        )
+        if test_keys
+        else (0, 0)
+    )
 
     # ---------- data.yaml ----------
     yaml_content = generate_data_yaml(args.include_test_in_yaml)
@@ -1177,8 +1170,7 @@ def main() -> None:
     print(f"  Train: {n_train} images, {a_train} annotations")
     print(f"  Val:   {n_val} images, {a_val} annotations")
     print(f"  Test:  {n_test} images, {a_test} annotations")
-    print(f"  Total: {n_train + n_val + n_test} images, "
-          f"{a_train + a_val + a_test} annotations")
+    print(f"  Total: {n_train + n_val + n_test} images, " f"{a_train + a_val + a_test} annotations")
     print(f"  Classes: 1 ('{CLASS_NAME}')")
     print("=" * 60)
 

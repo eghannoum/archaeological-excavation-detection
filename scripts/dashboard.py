@@ -11,13 +11,11 @@ Launch:
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import os
-import subprocess
-import sys
 import threading
-import time
 from pathlib import Path
 
 import gradio as gr
@@ -99,6 +97,7 @@ def unload_model() -> None:
 # Tab 1 — Model Metrics
 # ---------------------------------------------------------------------------
 
+
 def _load_metrics_table() -> pd.DataFrame | None:
     """Load evaluation metrics from results.json into a DataFrame."""
     if not RESULTS_JSON.exists():
@@ -136,6 +135,7 @@ def _load_training_curve() -> Path | None:
     # Build a simple loss curve image from the CSV using matplotlib (if available)
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt  # noqa: N812
     except ImportError:
@@ -257,14 +257,18 @@ def build_metrics_tab() -> None:
 # Tab 2 — Interactive Inference
 # ---------------------------------------------------------------------------
 
+
 def run_inference(
     image: Image.Image,
     conf_threshold: float,
-    progress: gr.Progress = gr.Progress(),
+    progress: gr.Progress | None = None,
 ) -> tuple[Image.Image | None, str, pd.DataFrame | None]:
     """Run YOLO detection on a single image and return annotated result."""
     if image is None:
         return None, "Please upload an image first.", None
+
+    if progress is None:
+        progress = gr.Progress()
 
     progress(0.0, desc="Loading model…")
     try:
@@ -273,11 +277,15 @@ def run_inference(
         return None, f"**Error:** {exc}", None
 
     if model is None:
-        return None, (
-            "**Model not found.**\n\n"
-            f"Expected at `{BEST_PT}` or `{LAST_PT}`.\n\n"
-            "Run `python scripts/train.py` first to train the model."
-        ), None
+        return (
+            None,
+            (
+                "**Model not found.**\n\n"
+                f"Expected at `{BEST_PT}` or `{LAST_PT}`.\n\n"
+                "Run `python scripts/train.py` first to train the model."
+            ),
+            None,
+        )
 
     progress(0.3, desc="Running detection…")
     try:
@@ -300,7 +308,9 @@ def run_inference(
             cls_name = model.names[cls_id] if model.names else str(cls_id)
             conf = float(box.conf[0])
             x1, y1, x2, y2 = box.xyxy[0].tolist()
-            data.append([cls_name, f"{conf:.3f}", f"{x1:.1f}", f"{y1:.1f}", f"{x2:.1f}", f"{y2:.1f}"])
+            data.append(
+                [cls_name, f"{conf:.3f}", f"{x1:.1f}", f"{y1:.1f}", f"{x2:.1f}", f"{y2:.1f}"]
+            )
         detections_df = pd.DataFrame(
             data,
             columns=["Class", "Confidence", "x1", "y1", "x2", "y2"],
@@ -347,7 +357,6 @@ def build_inference_tab() -> None:
                 height=400,
             )
 
-
     summary_output = gr.Markdown()
     detections_table = gr.DataFrame(
         label="Detections",
@@ -356,7 +365,6 @@ def build_inference_tab() -> None:
     )
 
     # Example images
-    examples: list[list[str]] = []
     if DATASET_TEST_DIR.exists():
         png_files = sorted(DATASET_TEST_DIR.glob("*.png"))
         if png_files:
@@ -378,17 +386,21 @@ def build_inference_tab() -> None:
 # Tab 3 — Batch Inference
 # ---------------------------------------------------------------------------
 
+
 def run_batch(
     source_path: str,
     output_path: str,
     conf_threshold: float,
-    progress: gr.Progress = gr.Progress(),
+    progress: gr.Progress | None = None,
 ) -> tuple[str, str | None]:
     """Run detection on all images in a directory."""
     src = Path(source_path) if source_path else None
 
     if src is None or not src.is_dir():
         return "**Error:** Source path is not a valid directory.", None
+
+    if progress is None:
+        progress = gr.Progress()
 
     out = Path(output_path).resolve() if output_path else DEFAULT_BATCH_OUTPUT.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -460,10 +472,8 @@ def run_batch(
 
     # Write log
     log_path = out / "_batch_log.txt"
-    try:
+    with contextlib.suppress(OSError):
         log_path.write_text("\n".join(log_lines), encoding="utf-8")
-    except OSError:
-        pass
 
     progress(1.0, desc="Done")
     return summary, str(out)

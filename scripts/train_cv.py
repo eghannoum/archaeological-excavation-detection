@@ -26,7 +26,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -52,8 +51,6 @@ DATASET_DIR = PROJECT_ROOT / "dataset"
 """Dataset root directory."""
 IMAGES_TRAIN = DATASET_DIR / "images" / "train"
 IMAGES_VAL = DATASET_DIR / "images" / "val"
-LABELS_TRAIN = DATASET_DIR / "labels" / "train"
-LABELS_VAL = DATASET_DIR / "labels" / "val"
 
 # ---------------------------------------------------------------------------
 # Scene-ID extraction
@@ -107,9 +104,9 @@ def extract_parent_scene(filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def get_all_images() -> List[Path]:
+def get_all_images() -> list[Path]:
     """Return all image paths in both ``train`` and ``val`` directories."""
-    images: List[Path] = []
+    images: list[Path] = []
     for d in [IMAGES_TRAIN, IMAGES_VAL]:
         if d.exists():
             images.extend(sorted(d.iterdir()))
@@ -117,8 +114,8 @@ def get_all_images() -> List[Path]:
 
 
 def group_by_parent_scene(
-    image_paths: List[Path],
-) -> Dict[str, List[Path]]:
+    image_paths: list[Path],
+) -> dict[str, list[Path]]:
     """Group image paths by their parent-scene identifier.
 
     Returns
@@ -126,7 +123,7 @@ def group_by_parent_scene(
     dict
         ``{parent_scene: [list of image Paths]}``
     """
-    groups: Dict[str, List[Path]] = {}
+    groups: dict[str, list[Path]] = {}
     for img_path in image_paths:
         scene = extract_parent_scene(img_path.name)
         groups.setdefault(scene, []).append(img_path)
@@ -139,11 +136,11 @@ def group_by_parent_scene(
 
 
 def create_fold_splits(
-    scene_groups: Dict[str, List[Path]],
+    scene_groups: dict[str, list[Path]],
     n_folds: int,
     shuffle: bool = True,
     seed: int = 42,
-) -> List[Tuple[List[Path], List[Path]]]:
+) -> list[tuple[list[Path], list[Path]]]:
     """Split parent-scene groups into ``n_folds`` train/val folds.
 
     Each fold uses ``n_folds - 1`` scene groups for training and 1 held-out
@@ -171,23 +168,23 @@ def create_fold_splits(
         rng.shuffle(scenes)
 
     # Split scenes into n_folds roughly equal-sized groups
-    fold_scenes: List[List[str]] = [[] for _ in range(n_folds)]
+    fold_scenes: list[list[str]] = [[] for _ in range(n_folds)]
     for i, scene in enumerate(scenes):
         fold_scenes[i % n_folds].append(scene)
 
-    folds: List[Tuple[List[Path], List[Path]]] = []
+    folds: list[tuple[list[Path], list[Path]]] = []
     for val_idx in range(n_folds):
-        train_scenes: List[str] = []
+        train_scenes: list[str] = []
         val_scenes = fold_scenes[val_idx]
         for fold_idx, scenes_in_fold in enumerate(fold_scenes):
             if fold_idx != val_idx:
                 train_scenes.extend(scenes_in_fold)
 
-        train_paths: List[Path] = []
+        train_paths: list[Path] = []
         for s in train_scenes:
             train_paths.extend(scene_groups[s])
 
-        val_paths: List[Path] = []
+        val_paths: list[Path] = []
         for s in val_scenes:
             val_paths.extend(scene_groups[s])
 
@@ -201,7 +198,7 @@ def create_fold_splits(
 # ---------------------------------------------------------------------------
 
 
-def _write_image_list(file_path: Path, image_paths: List[Path]) -> None:
+def _write_image_list(file_path: Path, image_paths: list[Path]) -> None:
     """Write a list of absolute image paths to a text file, one per line.
 
     Ultralytics reads these files when the data YAML ``train:`` / ``val:``
@@ -216,10 +213,10 @@ def _write_image_list(file_path: Path, image_paths: List[Path]) -> None:
 
 def write_fold_data_yaml(
     fold_dir: Path,
-    train_paths: List[Path],
-    val_paths: List[Path],
+    train_paths: list[Path],
+    val_paths: list[Path],
     nc: int = 1,
-    names: Optional[List[str]] = None,
+    names: list[str] | None = None,
 ) -> Path:
     """Create a fold-specific data YAML and accompanying image-list text files.
 
@@ -277,7 +274,7 @@ def write_fold_data_yaml(
 def query_fold_metrics(
     experiment_name: str,
     fold: int,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Query MLflow for the final metrics logged by the fold training run.
 
     This function uses the ``MlflowClient`` to search for runs matching the
@@ -300,10 +297,10 @@ def query_fold_metrics(
         import mlflow
         from mlflow.entities import Run
 
-        # Set tracking URI to match the one used by train.py
-        db_path = PROJECT_ROOT / "mlruns" / "mlflow.db"
-        tracking_uri = f"sqlite:///{db_path.as_posix()}"
-        mlflow.set_tracking_uri(tracking_uri)
+        from scripts.mlflow_utils import TRACKING_URI
+
+        # Use the shared tracking URI — same SQLite DB as scripts/train.py
+        mlflow.set_tracking_uri(TRACKING_URI)
 
         client = mlflow.MlflowClient()
         experiment = client.get_experiment_by_name(experiment_name)
@@ -311,7 +308,7 @@ def query_fold_metrics(
             logger.warning("MLflow experiment '%s' not found", experiment_name)
             return {}
 
-        runs: List[Run] = client.search_runs(
+        runs: list[Run] = client.search_runs(
             experiment_ids=[experiment.experiment_id],
             filter_string=f"tags.cv_fold = '{fold}'",
             order_by=["attributes.start_time desc"],
@@ -328,8 +325,8 @@ def query_fold_metrics(
 
 
 def aggregate_fold_metrics(
-    all_fold_metrics: List[Dict[str, float]],
-) -> Dict[str, Tuple[float, float]]:
+    all_fold_metrics: list[dict[str, float]],
+) -> dict[str, tuple[float, float]]:
     """Compute mean ± std across folds for each metric.
 
     Parameters
@@ -350,7 +347,7 @@ def aggregate_fold_metrics(
     for m in all_fold_metrics:
         all_keys.update(m.keys())
 
-    aggregated: Dict[str, Tuple[float, float]] = {}
+    aggregated: dict[str, tuple[float, float]] = {}
     for key in sorted(all_keys):
         values = [m.get(key, float("nan")) for m in all_fold_metrics]
         values = [v for v in values if not np.isnan(v)]
@@ -366,12 +363,14 @@ def aggregate_fold_metrics(
 
 def run_cv(
     experiment_override: str,
-    extra_overrides: Optional[List[str]] = None,
+    extra_overrides: list[str] | None = None,
     *,
     n_folds: int = 3,
     cleanup: bool = True,
     epochs: int = 100,
-) -> Dict[str, Tuple[float, float]]:
+    cv_seed: int = 42,
+    cv_shuffle: bool = True,
+) -> dict[str, tuple[float, float]]:
     """Run k-fold cross-validation.
 
     Parameters
@@ -386,6 +385,10 @@ def run_cv(
         Remove fold data files after completion.
     epochs
         Number of training epochs (overrides config).
+    cv_seed
+        RNG seed for the parent-scene fold split (from ``cv.random_seed``).
+    cv_shuffle
+        Whether to randomize scene order before folding (from ``cv.shuffle``).
 
     Returns
     -------
@@ -419,7 +422,12 @@ def run_cv(
         return {}
 
     # --- 2. Create fold splits ---
-    folds = create_fold_splits(scene_groups, n_folds=n_folds)
+    folds = create_fold_splits(
+        scene_groups,
+        n_folds=n_folds,
+        shuffle=cv_shuffle,
+        seed=cv_seed,
+    )
 
     # --- 3. Run training for each fold ---
     train_script = PROJECT_ROOT / "scripts" / "train.py"
@@ -427,7 +435,7 @@ def run_cv(
         logger.error("Training script not found: %s", train_script)
         return {}
 
-    fold_results: List[Dict[str, float]] = []
+    fold_results: list[dict[str, float]] = []
     base_overrides = extra_overrides or []
 
     for fold_idx, (train_paths, val_paths) in enumerate(folds):
@@ -461,7 +469,18 @@ def run_cv(
             text=True,
         )
         elapsed = time.time() - start
-        logger.info("Fold %d completed in %.1f s (return code=%d)", fold_idx, elapsed, result.returncode)
+        if result.returncode != 0:
+            logger.error(
+                "Fold %d FAILED (return code=%d) — skipping metric aggregation for this fold",
+                fold_idx,
+                result.returncode,
+            )
+            fold_results.append({})
+            continue
+
+        logger.info(
+            "Fold %d completed in %.1f s (return code=%d)", fold_idx, elapsed, result.returncode
+        )
 
         # Collect metrics from MLflow
         fold_metrics = query_fold_metrics(experiment_override, fold_idx)
@@ -498,7 +517,7 @@ def run_cv(
 # ---------------------------------------------------------------------------
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments.
 
     We take the first non-``--`` argument as the experiment name override for
@@ -548,11 +567,11 @@ def main() -> None:
     # Strip "experiment=" prefix if present (user may pass Hydra-style)
     experiment_name: str = args.experiment
     if experiment_name.startswith("experiment="):
-        experiment_name = experiment_name[len("experiment="):]
+        experiment_name = experiment_name[len("experiment=") :]
         logger.info("Stripped 'experiment=' prefix — using experiment='%s'", experiment_name)
 
     # Build extra Hydra overrides list (excluding the consumed args)
-    extra_overrides: List[str] = list(args.hydra_overrides)
+    extra_overrides: list[str] = list(args.hydra_overrides)
 
     n_folds = args.folds  # may be None — will use compose API default
     epochs = args.epochs
@@ -590,6 +609,10 @@ def main() -> None:
             epochs = 100
         logger.info("Using epochs=%d", epochs)
 
+    cv_seed = getattr(cfg.cv, "random_seed", 42) if cfg else 42
+    cv_shuffle = getattr(cfg.cv, "shuffle", True) if cfg else True
+    logger.info("Using cv random_seed=%d, shuffle=%s", cv_seed, cv_shuffle)
+
     # Run CV
     run_cv(
         experiment_override=experiment_name,
@@ -597,6 +620,8 @@ def main() -> None:
         n_folds=n_folds,
         cleanup=not args.no_cleanup,
         epochs=epochs,
+        cv_seed=cv_seed,
+        cv_shuffle=cv_shuffle,
     )
 
 
