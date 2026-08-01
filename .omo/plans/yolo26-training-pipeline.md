@@ -45,7 +45,7 @@ Wave 4 (Parallel):
   **Must NOT do**:
   - Do not install CPU-only torch (needs CUDA for training speed)
 
-- [x] 2. Train YOLO26m (actual: yolo26n) model
+- [x] 2. Train YOLO26m model
 
   **What to do**:
   Create `scripts/train.py` that:
