@@ -371,40 +371,44 @@ Target: **â‰¥80% coverage** on `scripts/` core modules; CI gates on pass.
 
 ### Prioritized action plan
 
-| Priority | Action | Effort |
-|----------|--------|--------|
-| **P0** | Security: remove absolute paths from tracked files, untrack `.omo/`+`.omc/`, delete log/scratch junk | S |
-| **P0** | Fix `requirements.txt` (portable torch, uncomment mlflow/optuna, pin all) | S |
-| **P0** | Create LICENSE + README (the two minimum-viable-public items) | M |
-| **P1** | Fix `inference.py` (auto device, logging, batch, video, model path) | M |
-| **P1** | Fix `train.py` (`device: auto`, remove dead `train_non_yolo`, seed `random`) | S |
-| **P1** | Add CI + pre-commit + issue/PR templates + Dependabot | M |
-| **P1** | Fix `requirements`-adjacent breakage: `augmentation.py` albumentations drift | S |
-| **P2** | Extract shared `yolo_utils.py` (3 duplicate parsers); fix `dataset_analysis.py` hardcoded size | M |
-| **P2** | Add tests (dataset, config, inference, utils) | M |
-| **P2** | Fix `hpo_analysis.py` hardcoded report; `train_cv.py` return-code check | M |
-| **P2** | `pyproject.toml` + run black/isort/ruff across scripts | M |
-| **P3** | Wire `resume`/`deterministic`/dead config keys or delete them | M |
-| **P3** | Deduplicate DETR/FasterRCNN shared code (~600 lines) | L |
-| **P3** | Dockerfile + ONNX/TensorRT export docs + dashboard Linux fix | M |
-| **P4** | History scrub (`git filter-repo`), git tags, first release | S |
+Status legend: **[x]** done, **[~]** partial, **[ ]** open.
+
+| Priority | Action | Effort | Status |
+|----------|--------|--------|--------|
+| **P0** | Security: remove absolute paths from tracked files, untrack `.omo/`+`.omc/`, delete log/scratch junk | S | **[x]** |
+| **P0** | Fix `requirements.txt` (portable torch, uncomment mlflow/optuna, pin all) | S | **[x]** |
+| **P0** | Create LICENSE + README (the two minimum-viable-public items) | M | **[x]** |
+| **P1** | Fix `inference.py` (auto device, logging, batch, video, model path) | M | **[x]** |
+| **P1** | Fix `train.py` (`device: auto`, remove dead `train_non_yolo`, seed `random`) | S | **[x]** |
+| **P1** | Add CI + pre-commit + issue/PR templates + Dependabot | M | **[x]** |
+| **P1** | Fix `requirements`-adjacent breakage: `augmentation.py` albumentations drift | S | **[x]** |
+| **P2** | Extract shared `yolo_utils.py` (3 duplicate parsers); fix `dataset_analysis.py` hardcoded size | M | **[x]** |
+| **P2** | Add tests (dataset, config, inference, utils) | M | **[x]** |
+| **P2** | Fix `hpo_analysis.py` hardcoded report; `train_cv.py` return-code check | M | **[x]** |
+| **P2** | `pyproject.toml` + run black/isort/ruff across scripts | M | **[x]** |
+| **P3** | Wire `resume`/`deterministic`/dead config keys or delete them | M | **[x]** (dead keys pruned) |
+| **P3** | Deduplicate DETR/FasterRCNN shared code (~600 lines) | L | **[ ]** |
+| **P3** | Dockerfile + ONNX/TensorRT export docs + dashboard Linux fix | M | **[~]** (Dockerfile + DEPLOYMENT.md done; dashboard `os.startfile` remains) |
+| **P4** | History scrub (`git filter-repo`), git tags, first release | S | **[ ]** |
 
 ### Scores (0â€“100%)
 
+Scores below are updated post-execution (see git log `b35ba2a..f4d5dd4`).
+
 | Dimension | Score | Rationale |
 |-----------|------:|-----------|
-| **Publication readiness** | **35%** | Blocked by P0 items (license, README, paths, requirements) |
-| **Maintainability** | **55%** | Good modularity; hurt by 3Ã— duplication, dead configs, no lint/tests |
-| **Reproducibility** | **60%** | Seeds + Hydra + MLflow + deterministic folds; hurt by DataLoader shuffle, hardcoded narrative, CWD-dependent paths |
-| **Code quality** | **50%** | Several scripts are genuinely good (train.py, coco_to_yolo.py); several are copy-paste research code with latent bugs |
-| **Security** | **70%** | No secrets; but absolute paths in tracked files + tool state in history |
-| **Production readiness** | **30%** | No tests, no CI, CPU-default inference, no packaging, no container, no serving story |
+| **Publication readiness** | **85%** | LICENSE, README, CONTRIBUTING, CHANGELOG, CODE_OF_CONDUCT, SECURITY, .gitattributes, sample data, DEPLOYMENT.md, Dockerfile all present; paths scrubbed; CITATION.cff deliberately omitted |
+| **Maintainability** | **78%** | Shared `yolo_utils.py` kills 3Ã— duplication; dead Hydra groups pruned; ruff/black clean (0 errors); modular structure intact |
+| **Reproducibility** | **80%** | `random` seeded, `cv.random_seed`/`shuffle` wired, augmentation YAML aligned with 2.x API, `data/README.md` provenance, Hydra `--info` verified for all 7 experiments |
+| **Code quality** | **80%** | inference.py rewritten (auto-device, video/webcam/batch, logging); train.py/train_cv.py fixed; 36 tests green; lint clean |
+| **Security** | **90%** | No secrets; all absolute paths scrubbed; `.omo`/`.omc` untracked + gitignored; dependabot active; mlflow local-only |
+| **Production readiness** | **75%** | 36-test suite, CI + release workflows, Dockerfile, pyproject packaging, auto-device inference, deployment guide; remaining: DETR/FasterRCNN dedupe, dashboard Linux fix, first release |
 
 ---
 
 ## 15. Additional Context Needed
 
-- **License preference** (MIT / Apache-2.0 / AGPL-3.0 / CC-BY for docs) â€” required before release.
-- **Author/citation details** for `CITATION.cff` (paper lists `[Author Name]`).
-- **Whether the 11.4 GB `mlruns/` and 1.9 GB `runs/` should be pruned** before any future git operations.
-- **Weights hosting preference** (HuggingFace / Zenodo / Google Drive) for the download script.
+- ~~**License preference**~~ **[x]** MIT (user decision).
+- ~~**Author/citation details** for `CITATION.cff`~~ **[x]** Deliberately omitted (user decision — no citation file).
+- ~~**Whether the 11.4 GB `mlruns/` and 1.9 GB `runs/` should be pruned**~~ **[x]** All generated outputs stay local + gitignored (train-to-reproduce; no pruning needed for the repo).
+- ~~**Weights hosting preference**~~ **[x]** Skip weights entirely (user decision) — README documents train-to-reproduce.
