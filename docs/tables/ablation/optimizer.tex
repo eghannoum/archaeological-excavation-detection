@@ -1,0 +1,13 @@
+\begin{table}[htbp]
+\centering
+\caption{Effect of optimizer choice on YOLO26-M detection performance.}
+\label{tab:ablation-optimizer}
+\begin{tabular}{lllrrrr}
+\toprule
+Optimizer & LR & Scheduler & mAP50 & mAP50--95 & P & R & $\Delta$mAP50 \\
+\midrule
+AdamW (baseline) & 4.7e-4 & Linear & 0.351 & 0.103 & 0.437 & 0.389 & -- \\
+SGD & 1.0e-2 & Cosine & 0.342 & 0.100 & 0.444 & 0.393 & -0.009 \\
+\bottomrule
+\end{tabular}
+\end{table}

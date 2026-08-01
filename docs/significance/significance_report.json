@@ -1,0 +1,382 @@
+{
+  "n_bootstrap": 1000,
+  "significance_threshold": 0.05,
+  "model_stats": {
+    "yolo26n": {
+      "mAP50_mean": 0.3715,
+      "mAP50_ci_95": [
+        0.3013,
+        0.4138
+      ],
+      "mAP50_boot_std": 0.0283,
+      "mAP50_folds": [
+        0.3994,
+        0.3013,
+        0.4138
+      ],
+      "mAP50-95_mean": 0.1053,
+      "mAP50-95_ci_95": [
+        0.0863,
+        0.118
+      ],
+      "mAP50-95_boot_std": 0.0077,
+      "mAP50-95_folds": [
+        0.1115,
+        0.0863,
+        0.118
+      ]
+    },
+    "yolo26s": {
+      "mAP50_mean": 0.4213,
+      "mAP50_ci_95": [
+        0.3355,
+        0.4791
+      ],
+      "mAP50_boot_std": 0.0351,
+      "mAP50_folds": [
+        0.4494,
+        0.3355,
+        0.4791
+      ],
+      "mAP50-95_mean": 0.1223,
+      "mAP50-95_ci_95": [
+        0.098,
+        0.1402
+      ],
+      "mAP50-95_boot_std": 0.0101,
+      "mAP50-95_folds": [
+        0.1288,
+        0.098,
+        0.1402
+      ]
+    },
+    "yolo26m": {
+      "mAP50_mean": 0.3888,
+      "mAP50_ci_95": [
+        0.2994,
+        0.4345
+      ],
+      "mAP50_boot_std": 0.0359,
+      "mAP50_folds": [
+        0.4325,
+        0.2994,
+        0.4345
+      ],
+      "mAP50-95_mean": 0.1138,
+      "mAP50-95_ci_95": [
+        0.0879,
+        0.1299
+      ],
+      "mAP50-95_boot_std": 0.0105,
+      "mAP50-95_folds": [
+        0.1299,
+        0.0879,
+        0.1236
+      ]
+    },
+    "yolo26l": {
+      "mAP50_mean": 0.414,
+      "mAP50_ci_95": [
+        0.36,
+        0.4427
+      ],
+      "mAP50_boot_std": 0.0217,
+      "mAP50_folds": [
+        0.4394,
+        0.36,
+        0.4427
+      ],
+      "mAP50-95_mean": 0.1217,
+      "mAP50-95_ci_95": [
+        0.1076,
+        0.1289
+      ],
+      "mAP50-95_boot_std": 0.0057,
+      "mAP50-95_folds": [
+        0.1287,
+        0.1076,
+        0.1289
+      ]
+    },
+    "yolo26x": {
+      "mAP50_mean": 0.4242,
+      "mAP50_ci_95": [
+        0.3653,
+        0.4588
+      ],
+      "mAP50_boot_std": 0.0237,
+      "mAP50_folds": [
+        0.4485,
+        0.3653,
+        0.4588
+      ],
+      "mAP50-95_mean": 0.1238,
+      "mAP50-95_ci_95": [
+        0.1082,
+        0.1335
+      ],
+      "mAP50-95_boot_std": 0.0063,
+      "mAP50-95_folds": [
+        0.1297,
+        0.1082,
+        0.1335
+      ]
+    },
+    "yolov8m": {
+      "mAP50_mean": 0.416,
+      "mAP50_ci_95": [
+        0.3472,
+        0.4518
+      ],
+      "mAP50_boot_std": 0.0276,
+      "mAP50_folds": [
+        0.449,
+        0.3472,
+        0.4518
+      ],
+      "mAP50-95_mean": 0.1162,
+      "mAP50-95_ci_95": [
+        0.096,
+        0.1301
+      ],
+      "mAP50-95_boot_std": 0.0083,
+      "mAP50-95_folds": [
+        0.1226,
+        0.096,
+        0.1301
+      ]
+    },
+    "yolo11m": {
+      "mAP50_mean": 0.4317,
+      "mAP50_ci_95": [
+        0.3489,
+        0.4738
+      ],
+      "mAP50_boot_std": 0.0332,
+      "mAP50_folds": [
+        0.4738,
+        0.3489,
+        0.4725
+      ],
+      "mAP50-95_mean": 0.1203,
+      "mAP50-95_ci_95": [
+        0.0971,
+        0.1326
+      ],
+      "mAP50-95_boot_std": 0.0093,
+      "mAP50-95_folds": [
+        0.1326,
+        0.0971,
+        0.131
+      ]
+    },
+    "faster_rcnn": {
+      "mAP50_mean": 0.4464,
+      "mAP50_ci_95": [
+        0.427,
+        0.4577
+      ],
+      "mAP50_boot_std": 0.0078,
+      "mAP50_folds": [
+        0.4577,
+        0.427,
+        0.4544
+      ]
+    },
+    "detr": {
+      "mAP50_mean": 0.0656,
+      "mAP50_ci_95": [
+        0.057,
+        0.0748
+      ],
+      "mAP50_boot_std": 0.0042,
+      "mAP50_folds": [
+        0.057,
+        0.0652,
+        0.0748
+      ]
+    }
+  },
+  "pairwise_comparisons": {
+    "detr_vs_faster_rcnn": {
+      "p_value": 0.0,
+      "mean_diff": -0.3807,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo11m": {
+      "p_value": 0.0,
+      "mean_diff": -0.3661,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo26l": {
+      "p_value": 0.0,
+      "mean_diff": -0.3484,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo26m": {
+      "p_value": 0.0,
+      "mean_diff": -0.3232,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo26n": {
+      "p_value": 0.0,
+      "mean_diff": -0.3059,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo26s": {
+      "p_value": 0.0,
+      "mean_diff": -0.3557,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolo26x": {
+      "p_value": 0.0,
+      "mean_diff": -0.3586,
+      "significant_at_0.05": true
+    },
+    "detr_vs_yolov8m": {
+      "p_value": 0.0,
+      "mean_diff": -0.3503,
+      "significant_at_0.05": true
+    },
+    "faster_rcnn_vs_yolo11m": {
+      "p_value": 0.572,
+      "mean_diff": 0.0147,
+      "significant_at_0.05": false
+    },
+    "faster_rcnn_vs_yolo26l": {
+      "p_value": 0.0,
+      "mean_diff": 0.0323,
+      "significant_at_0.05": true
+    },
+    "faster_rcnn_vs_yolo26m": {
+      "p_value": 0.0,
+      "mean_diff": 0.0576,
+      "significant_at_0.05": true
+    },
+    "faster_rcnn_vs_yolo26n": {
+      "p_value": 0.0,
+      "mean_diff": 0.0749,
+      "significant_at_0.05": true
+    },
+    "faster_rcnn_vs_yolo26s": {
+      "p_value": 0.508,
+      "mean_diff": 0.025,
+      "significant_at_0.05": false
+    },
+    "faster_rcnn_vs_yolo26x": {
+      "p_value": 0.072,
+      "mean_diff": 0.0222,
+      "significant_at_0.05": false
+    },
+    "faster_rcnn_vs_yolov8m": {
+      "p_value": 0.0,
+      "mean_diff": 0.0304,
+      "significant_at_0.05": true
+    },
+    "yolo11m_vs_yolo26l": {
+      "p_value": 0.072,
+      "mean_diff": 0.0177,
+      "significant_at_0.05": false
+    },
+    "yolo11m_vs_yolo26m": {
+      "p_value": 0.0,
+      "mean_diff": 0.0429,
+      "significant_at_0.05": true
+    },
+    "yolo11m_vs_yolo26n": {
+      "p_value": 0.0,
+      "mean_diff": 0.0602,
+      "significant_at_0.05": true
+    },
+    "yolo11m_vs_yolo26s": {
+      "p_value": 0.072,
+      "mean_diff": 0.0104,
+      "significant_at_0.05": false
+    },
+    "yolo11m_vs_yolo26x": {
+      "p_value": 0.5,
+      "mean_diff": 0.0075,
+      "significant_at_0.05": false
+    },
+    "yolo11m_vs_yolov8m": {
+      "p_value": 0.0,
+      "mean_diff": 0.0157,
+      "significant_at_0.05": true
+    },
+    "yolo26l_vs_yolo26m": {
+      "p_value": 0.0,
+      "mean_diff": 0.0252,
+      "significant_at_0.05": true
+    },
+    "yolo26l_vs_yolo26n": {
+      "p_value": 0.0,
+      "mean_diff": 0.0425,
+      "significant_at_0.05": true
+    },
+    "yolo26l_vs_yolo26s": {
+      "p_value": 0.74,
+      "mean_diff": -0.0073,
+      "significant_at_0.05": false
+    },
+    "yolo26l_vs_yolo26x": {
+      "p_value": 0.0,
+      "mean_diff": -0.0102,
+      "significant_at_0.05": true
+    },
+    "yolo26l_vs_yolov8m": {
+      "p_value": 0.5,
+      "mean_diff": -0.0019,
+      "significant_at_0.05": false
+    },
+    "yolo26m_vs_yolo26n": {
+      "p_value": 0.072,
+      "mean_diff": 0.0173,
+      "significant_at_0.05": false
+    },
+    "yolo26m_vs_yolo26s": {
+      "p_value": 0.0,
+      "mean_diff": -0.0325,
+      "significant_at_0.05": true
+    },
+    "yolo26m_vs_yolo26x": {
+      "p_value": 0.0,
+      "mean_diff": -0.0354,
+      "significant_at_0.05": true
+    },
+    "yolo26m_vs_yolov8m": {
+      "p_value": 0.0,
+      "mean_diff": -0.0272,
+      "significant_at_0.05": true
+    },
+    "yolo26n_vs_yolo26s": {
+      "p_value": 0.0,
+      "mean_diff": -0.0498,
+      "significant_at_0.05": true
+    },
+    "yolo26n_vs_yolo26x": {
+      "p_value": 0.0,
+      "mean_diff": -0.0527,
+      "significant_at_0.05": true
+    },
+    "yolo26n_vs_yolov8m": {
+      "p_value": 0.0,
+      "mean_diff": -0.0445,
+      "significant_at_0.05": true
+    },
+    "yolo26s_vs_yolo26x": {
+      "p_value": 0.802,
+      "mean_diff": -0.0029,
+      "significant_at_0.05": false
+    },
+    "yolo26s_vs_yolov8m": {
+      "p_value": 0.518,
+      "mean_diff": 0.0054,
+      "significant_at_0.05": false
+    },
+    "yolo26x_vs_yolov8m": {
+      "p_value": 0.064,
+      "mean_diff": 0.0082,
+      "significant_at_0.05": false
+    }
+  }
+}

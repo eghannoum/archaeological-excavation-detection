@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{3-fold cross-validation results with 95\% confidence intervals and statistical significance groupings. Models sharing a letter are not significantly different (paired bootstrap test, $p<0.05$).}
+\label{tab:cv_results}
+\small
+\begin{tabular}{lccc}
+\toprule
+Model & mAP50 (mean$\pm$std) & mAP50-95 (mean$\pm$std) & Group \\
+\midrule
+YOLO26-X & 0.4242$\pm$0.0419 & 0.1238$\pm$0.0111 & a \\
+YOLO26-M & 0.3888$\pm$0.0632 & 0.1138$\pm$0.0185 & b \\
+YOLO26-S & 0.4213$\pm$0.0619 & 0.1223$\pm$0.0178 & a \\
+YOLO11-M & 0.4317$\pm$0.0586 & 0.1203$\pm$0.0164 & a \\
+YOLOv8-M & 0.4160$\pm$0.0487 & 0.1162$\pm$0.0146 & a \\
+Faster R-CNN & 0.4464$\pm$0.0138 & N/A & a \\
+YOLO26-N & 0.3715$\pm$0.0500 & 0.1053$\pm$0.0137 & b \\
+YOLO26-L & 0.4140$\pm$0.0382 & 0.1217$\pm$0.0100 & a \\
+DETR & 0.0656$\pm$0.0073 & N/A & c \\
+\bottomrule
+\end{tabular}
+\end{table}

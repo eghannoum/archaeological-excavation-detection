@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\caption{Effect of input image resolution on YOLO26-M detection performance.}
+\label{tab:ablation-image-size}
+\begin{tabular}{lrrrrr}
+\toprule
+Image Size & mAP50 & mAP50--95 & P & R & $\Delta$mAP50 \\
+\midrule
+640 (baseline) & 0.351 & 0.103 & 0.437 & 0.389 & -- \\
+320 & 0.290 & 0.081 & 0.467 & 0.325 & -0.061 \\
+1280 & 0.371 & 0.117 & 0.424 & 0.428 & +0.019 \\
+\bottomrule
+\end{tabular}
+\end{table}

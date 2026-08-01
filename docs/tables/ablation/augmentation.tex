@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\caption{Effect of data augmentation strategy on YOLO26-M detection performance.}
+\label{tab:ablation-augmentation}
+\begin{tabular}{lrrrrr}
+\toprule
+Augmentation & mAP50 & mAP50--95 & P & R & $\Delta$mAP50 \\
+\midrule
+Ultralytics (baseline) & 0.381 & 0.110 & 0.484 & 0.401 & -- \\
+Light & 0.343 & 0.100 & 0.445 & 0.383 & -0.038 \\
+Heavy & 0.343 & 0.100 & 0.445 & 0.383 & -0.038 \\
+\bottomrule
+\end{tabular}
+\end{table}

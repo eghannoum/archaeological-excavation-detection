@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{Object detection performance comparison on the held-out test set. Metrics: mean Average Precision (mAP) at IoU thresholds 0.5 and 0.5:0.95, Precision (P), Recall (R), F1-score, inference speed, params, FLOPs. \textbf{Bold} indicates best in each column, \textit{italics} second best.}
+\label{tab:main_results}
+\small
+\begin{tabular}{lcccccccc}
+\toprule
+Model & mAP50$\uparrow$ & mAP50-95$\uparrow$ & P$\uparrow$ & R$\uparrow$ & F1$\uparrow$ & Time(ms)$\downarrow$ & Params(M)$\downarrow$ & FLOPs(G)$\downarrow$ \\
+\midrule
+YOLO26-X & \textbf{0.437} & \textbf{0.140} & 0.431 & \textbf{0.603} & 0.503 & 370.2 & 58.8 & 193.4 \\
+YOLO26-M & \textit{0.406} & \textit{0.130} & 0.410 & 0.459 & 0.433 & 152.2 & 42.2 & 65.7 \\
+YOLO26-S & 0.376 & 0.123 & \textit{0.486} & 0.521 & \textit{0.503} & 71.2 & \textit{9.9} & \textit{24.6} \\
+YOLO11-M & 0.369 & 0.124 & \textbf{0.487} & \textit{0.529} & \textbf{0.507} & 160.0 & 38.8 & 67.6 \\
+YOLOv8-M & 0.368 & 0.116 & 0.406 & 0.513 & 0.453 & 151.6 & 49.7 & 78.7 \\
+Faster R-CNN & 0.354 & 0.101 & 0.441 & 0.471 & 0.456 & 46.0 & 41.5 & 134.0 \\
+YOLO26-N & 0.329 & 0.111 & 0.295 & 0.490 & 0.368 & \textit{41.1} & \textbf{5.3} & \textbf{8.7} \\
+YOLO26-L & 0.307 & 0.094 & 0.290 & 0.458 & 0.355 & 189.1 & 50.7 & 86.1 \\
+DETR & 0.006 & 0.001 & 0.011 & 0.016 & 0.013 & \textbf{25.0} & 41.3 & 86.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
