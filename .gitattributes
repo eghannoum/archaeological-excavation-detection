@@ -1,0 +1,36 @@
+# Normalize line endings and mark binary files
+* text=auto
+
+# Model weights and serialized artifacts (binary)
+*.pt binary
+*.pth binary
+*.onnx binary
+*.engine binary
+*.tflite binary
+
+# Image assets (binary)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.tif binary
+
+# Archives (binary)
+*.zip binary
+*.tar.gz binary
+
+# Notebooks (diffable text)
+*.ipynb text
+
+# Windows PowerShell scripts — keep CRLF
+*.ps1 text eol=crlf
+
+# Documentation and code (LF)
+*.md text
+*.py text
+*.yaml text
+*.yml text
+*.json text
+*.toml text
+*.txt text

@@ -1,0 +1,5 @@
+# CUDA-pinned builds (optional). On NVIDIA hardware with CUDA 12.8:
+#   pip install -r requirements-gpu.txt
+# or install the pinned pair first, then `pip install -r requirements.txt`.
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128

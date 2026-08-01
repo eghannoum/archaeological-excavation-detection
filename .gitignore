@@ -1,25 +1,65 @@
-# Generated dataset (432 images + labels — hundreds of MB, fully reproducible)
-dataset/
-# Per-run evidence artifacts
-.omo/evidence/
-# Python virtual environment
-.venv/
-# Python cache
+# ---- Python ----
 __pycache__/
-*.pyc
-# Source data (large, not for distribution)
-data/
-# Generated training/eval/inference outputs
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- Local tool state (internal, not for publication) ----
+.omc/
+.omo/
+
+# ---- Data (large, reproducible, not for distribution) ----
+data/*
+!data/sample/
+!data/README.md
+dataset/
+*.zip
+
+# ---- Generated outputs ----
 runs/
 outputs/
 experiments/
-# MLflow experiment tracking database
 mlruns/
-
-# Pretrained model weights (large, downloadable)
-*.pt
-
-# Temporary & working files
+logs/
+evidence/
 working/
 .tmp/
-dataset/folds/
+*.log
+
+# ---- Model weights (large, downloadable / train-to-reproduce) ----
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.mlmodel
+
+# ---- Scratch scripts (private one-off tooling) ----
+_check*.py
+_query*.py
+_merge*.py
+
+# ---- Generated config artifact (reproducible via scripts/hpo.py) ----
+configs/best_hparams.yaml
