@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a feature or improvement for the pipeline
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature. Please describe the problem you
+        are trying to solve and how you envision the feature working.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem would this feature solve?
+      placeholder: I'm trying to do X, but the current pipeline doesn't allow it.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should the feature behave? Include a rough design if useful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative designs you've thought about.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Links, sketches, or any other supporting information.
