@@ -15,18 +15,27 @@ import contextlib
 import csv
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 
-import gradio as gr
-import pandas as pd
-from PIL import Image
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+# regardless of whether the user runs ``python scripts/dashboard.py`` or
+# ``python -m scripts.dashboard``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import gradio as gr  # noqa: E402
+import pandas as pd  # noqa: E402
+from PIL import Image  # noqa: E402
 
 try:
     from ultralytics import YOLO
 except ImportError:
     YOLO = None  # type: ignore[assignment]
 
+from scripts.model_registry import resolve_best  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -57,11 +66,16 @@ _model_instance = None
 
 def _resolve_model_path() -> Path | None:
     """Return the best available model path, or None."""
-    if BEST_PT.exists():
-        return BEST_PT
-    if LAST_PT.exists():
-        return LAST_PT
-    return None
+    try:
+        return resolve_best()
+    except FileNotFoundError:
+        # No registry/scan result yet — fall back to the historical
+        # train-output locations so the dashboard still renders.
+        if BEST_PT.exists():
+            return BEST_PT
+        if LAST_PT.exists():
+            return LAST_PT
+        return None
 
 
 def load_model() -> YOLO | None:

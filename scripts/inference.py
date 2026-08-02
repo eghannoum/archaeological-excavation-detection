@@ -22,9 +22,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import cv2
-from PIL import Image
-from ultralytics import YOLO
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+# regardless of whether the user runs ``python scripts/inference.py`` or
+# ``python -m scripts.inference``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import cv2  # noqa: E402
+from PIL import Image  # noqa: E402
+from ultralytics import YOLO  # noqa: E402
+
+from scripts.model_registry import resolve_best  # noqa: E402
 
 logger = logging.getLogger("inference")
 
@@ -41,12 +50,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="runs/train/yolo26m-hole/weights/best.pt",
-        help=(
-            "Path to trained model weights. If missing, searches "
-            "runs/train/*/weights/best.pt, runs/*/weights/best.pt and "
-            "experiments/*/fold_0_best.pt as fallbacks."
-        ),
+        default="auto",
+        help="Path to trained model weights, or 'auto' to use the best registered model (registry → runs/ scan fallback). Explicit paths are used as-is",
     )
     parser.add_argument(
         "--source",
@@ -162,6 +167,11 @@ def _resolve_model_path(requested: str) -> Path:
     runs/train/*/weights/best.pt, runs/*/weights/best.pt, then
     experiments/*/fold_0_best.pt is used.
     """
+    if requested == "auto":
+        # resolve_best() raises FileNotFoundError with training guidance when
+        # nothing has been trained yet — let it surface to the user.
+        return resolve_best()
+
     requested_path = Path(requested)
     if requested_path.is_file():
         return requested_path

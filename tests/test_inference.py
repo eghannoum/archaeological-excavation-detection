@@ -129,3 +129,43 @@ def test_write_detections_csv_empty_writes_header_only(tmp_path):
         reader = csv.DictReader(fh)
         assert reader.fieldnames == CSV_FIELDNAMES
         assert list(reader) == []
+
+
+# ---------------------------------------------------------------------------
+# _resolve_model_path
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_model_path_auto_uses_registry(monkeypatch, tmp_path):
+    ckpt = tmp_path / "best.pt"
+    ckpt.write_bytes(b"")
+    monkeypatch.setattr(inference, "resolve_best", lambda: ckpt)
+    assert inference._resolve_model_path("auto") == ckpt
+
+
+def test_resolve_model_path_explicit_existing(tmp_path):
+    ckpt = tmp_path / "model.pt"
+    ckpt.write_bytes(b"")
+    assert inference._resolve_model_path(str(ckpt)) == ckpt
+
+
+def test_resolve_model_path_explicit_missing_walks_glob_fallbacks(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ckpt = tmp_path / "runs" / "train" / "exp_a" / "weights" / "best.pt"
+    ckpt.parent.mkdir(parents=True)
+    ckpt.write_bytes(b"")
+    assert inference._resolve_model_path("nope.pt").resolve() == ckpt
+
+
+def test_resolve_model_path_auto_raises_when_nothing_trained(monkeypatch):
+    monkeypatch.setattr(
+        inference,
+        "resolve_best",
+        lambda: (_ for _ in ()).throw(
+            FileNotFoundError(
+                "No trained model found. Train one first: python scripts/train.py experiment=yolo26m"
+            )
+        ),
+    )
+    with pytest.raises(FileNotFoundError, match="python scripts/train.py"):
+        inference._resolve_model_path("auto")

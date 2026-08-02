@@ -36,6 +36,7 @@ from omegaconf import DictConfig, OmegaConf  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 
 from scripts.mlflow_utils import finish_mlflow, init_mlflow  # noqa: E402
+from scripts.model_registry import update_best_model  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -415,6 +416,21 @@ def main(cfg: DictConfig) -> None:
             logger.info("Best model checkpoint: %s", model_path_str)
         else:
             logger.warning("Could not locate best.pt — model artifact not logged")
+
+        if best_path and final_metrics:
+            try:
+                # _extract_final_metrics() returns val/-prefixed keys (val/mAP50, ...)
+                # to match the MLflow convention; the registry scores bare metric
+                # names (mAP50, mAP50-95, f1_score) — normalize before registering.
+                registry_metrics = {
+                    key.removeprefix("val/"): value for key, value in final_metrics.items()
+                }
+                updated = update_best_model(
+                    best_path, registry_metrics, experiment=cfg.experiment.name
+                )
+                logger.info("Best-model registry updated=%s (best=%s)", updated, best_path)
+            except Exception as exc:  # noqa: BLE001 - registry must never crash training
+                logger.warning("Could not update best-model registry: %s", exc)
 
     except Exception:
         logger.exception("Training failed")

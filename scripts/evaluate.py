@@ -2,19 +2,31 @@
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
-import torch
-from ultralytics import YOLO
+# Ensure the project root is on sys.path so ``from scripts.xxx`` imports work
+# regardless of whether the user runs ``python scripts/evaluate.py`` or
+# ``python -m scripts.evaluate``.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import torch  # noqa: E402
+from ultralytics import YOLO  # noqa: E402
+
+from scripts.model_registry import resolve_best, update_best_model  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate trained YOLO26m hole detection model")
     parser.add_argument(
         "--model",
-        default="runs/train/yolo26m-hole/weights/best.pt",
-        help="Path to trained model weights (default: runs/train/yolo26m-hole/weights/best.pt)",
+        default="auto",
+        help="Path to trained model weights, or 'auto' for the best registered model (default: auto)",
     )
     parser.add_argument(
         "--data",
@@ -39,7 +51,11 @@ def main() -> None:
     split = args.split
 
     # --- Checks ---
-    if not model_path.exists():
+    if args.model == "auto":
+        # resolve_best() raises FileNotFoundError with training guidance when
+        # nothing is trained yet — let it surface to the user.
+        model_path = resolve_best()
+    elif not model_path.exists():
         sys.exit(
             f"ERROR: Model not found at {model_path}\n"
             f"       Train a model first with: python scripts/train.py"
@@ -138,6 +154,13 @@ def main() -> None:
     with open(results_json_path, "w") as f:
         json.dump(results_dict, f, indent=2)
     print(f"\nMetrics saved to {results_json_path}")
+
+    # --- Update best-model registry (a registry hiccup must never abort eval) ---
+    try:
+        updated = update_best_model(model_path, metrics)
+        logger.info("Best-model registry updated=%s (best=%s)", updated, model_path)
+    except Exception as exc:
+        logger.warning("Could not update best-model registry: %s", exc)
 
     # --- Confusion matrix ---
     cm_path = None
