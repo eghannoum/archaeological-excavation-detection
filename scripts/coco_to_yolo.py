@@ -39,7 +39,7 @@ try:
     from PIL import Image, ImageOps
 except ImportError:
     Image = None  # type: ignore[assignment]
-    ImageOps = None
+    ImageOps = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -847,7 +847,7 @@ def convert_split(
             total_anns += len(anns)
 
             # Open image for dynamic dimensions
-            pil_img = Image.open(str(dst_img))
+            pil_img: Image.Image = Image.open(str(dst_img))
             # If --apply-exif-orientation, physically rotate
             if apply_exif_orientation:
                 try:

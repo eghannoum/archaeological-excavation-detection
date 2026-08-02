@@ -119,7 +119,7 @@ class YOLODetectionDataset(Dataset):
         orig_w, orig_h = img.size
 
         # Resize to training size
-        img = img.resize((self.image_size, self.image_size), Image.BILINEAR)
+        img = img.resize((self.image_size, self.image_size), Image.Resampling.BILINEAR)
 
         # Scale factors
         scale_x = self.image_size / orig_w
@@ -663,7 +663,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> dict[str, Any]:
     args = parse_args()
 
     logger.info("=" * 70)

@@ -397,7 +397,7 @@ def _run_frame_loop(
             if writer is None:
                 height, width = annotated.shape[:2]
                 writer = cv2.VideoWriter(
-                    str(out_video_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+                    str(out_video_path), cv2.VideoWriter.fourcc(*"mp4v"), fps, (width, height)
                 )
             writer.write(annotated)
             processed += 1
@@ -466,7 +466,7 @@ def _run_video_stream(
             if writer is None:
                 height, width = frame.shape[:2]
                 writer = cv2.VideoWriter(
-                    str(out_video), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+                    str(out_video), cv2.VideoWriter.fourcc(*"mp4v"), fps, (width, height)
                 )
             writer.write(frame)
             processed += 1

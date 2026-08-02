@@ -18,6 +18,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import TypedDict
 
 import torch
 from ultralytics import YOLO
@@ -32,7 +33,13 @@ IMAGE_SIZE = 640
 WARMUP_ITERS = 100
 TIMED_ITERS = 100
 
-VARIANT_INFO = {
+
+class VariantInfo(TypedDict):
+    batch_sizes: list[int]
+    weight: str
+
+
+VARIANT_INFO: dict[str, VariantInfo] = {
     "yolo26n": {"batch_sizes": [16, 32, 64], "weight": "yolo26n.pt"},
     "yolo26s": {"batch_sizes": [16, 32], "weight": "yolo26s.pt"},
     "yolo26m": {"batch_sizes": [8, 16], "weight": "yolo26m.pt"},

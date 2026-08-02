@@ -132,7 +132,7 @@ class DETRDataset(Dataset):
         pad_y = (self.image_size - new_h) / 2.0
 
         # Resize image
-        resized_img = img.resize((int(new_w), int(new_h)), Image.BILINEAR)
+        resized_img = img.resize((int(new_w), int(new_h)), Image.Resampling.BILINEAR)
 
         # Pad to image_size x image_size with zeros (black)
         padded_img = Image.new("RGB", (self.image_size, self.image_size), (0, 0, 0))
@@ -475,15 +475,15 @@ class SetCriterion(nn.Module):
             }
 
         # Gather matched predictions and targets
-        pred_boxes_matched = []
-        target_boxes_matched = []
+        pred_boxes_matched_list: list[torch.Tensor] = []
+        target_boxes_matched_list: list[torch.Tensor] = []
         for b, (pred_idx, gt_idx) in enumerate(indices):
             if len(pred_idx) > 0:
-                pred_boxes_matched.append(pred_boxes[b, pred_idx])
-                target_boxes_matched.append(targets[b]["boxes"][gt_idx])
+                pred_boxes_matched_list.append(pred_boxes[b, pred_idx])
+                target_boxes_matched_list.append(targets[b]["boxes"][gt_idx])
 
-        pred_boxes_matched = torch.cat(pred_boxes_matched, dim=0)
-        target_boxes_matched = torch.cat(target_boxes_matched, dim=0)
+        pred_boxes_matched = torch.cat(pred_boxes_matched_list, dim=0)
+        target_boxes_matched = torch.cat(target_boxes_matched_list, dim=0)
 
         # L1 loss
         loss_bbox = self.loss_bbox(pred_boxes_matched, target_boxes_matched).mean()
@@ -1190,7 +1190,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> None:
+def main() -> dict[str, Any]:
     args = parse_args()
 
     logger.info("=" * 70)
