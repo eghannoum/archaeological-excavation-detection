@@ -1,21 +1,20 @@
 repos:
-  # Ruff — linting and formatting
+  # Ruff — linting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.10
+    rev: v0.16.1
     hooks:
       - id: ruff
         args: [--fix]
-      - id: ruff-format
 
   # Black — deterministic formatting
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.5.1
     hooks:
       - id: black
 
   # isort — import sorting (Black profile)
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 8.0.1
     hooks:
       - id: isort
         args: ["--profile", "black"]
