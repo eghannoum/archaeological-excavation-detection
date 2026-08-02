@@ -9,6 +9,7 @@ per-developer basis. The documented layout is:
 
 ```
 data/
+├── data.zip                           # archive of the raw source tiles (gitignored, not distributed)
 ├── input_images/                      # raw satellite image tiles (source)
 ├── output_annotations_notebook/
 │   └── combined_coco_split.json       # COCO annotations generated in a notebook
@@ -19,6 +20,7 @@ data/
 > Note: only `sample/` is committed. `input_images/`, `output_annotations_notebook/`,
 > and `output_splits_notebook/` are developer-local inputs referenced by
 > `scripts/coco_to_yolo.py` and the data-preparation notebooks.
+> `data.zip` (the archive of the raw source tiles) is gitignored via `*.zip` and not distributed.
 
 ## Reproduction pipeline
 
