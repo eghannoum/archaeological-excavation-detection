@@ -63,3 +63,38 @@ _merge*.py
 
 # ---- Generated config artifact (reproducible via scripts/hpo.py) ----
 configs/best_hparams.yaml
+
+# ---- Secrets / environment (never commit) ----
+.env
+.env.*
+!.env.example
+
+# ---- Jupyter / notebooks ----
+.ipynb_checkpoints/
+.ipython/
+profile_default/
+ipython_config.py
+
+# ---- MLflow / experiment-tracking databases & artifacts ----
+mlflow.db
+mlartifacts/
+wandb/
+.wandb/
+
+# ---- Additional model / artifact formats ----
+*.ckpt
+*.joblib
+*.h5
+*.hdf5
+*.safetensors
+
+# ---- Deep-learning caches ----
+lightning_logs/
+torch_cache/
+.hub/
+.torch/
+
+# ---- Type-checker / misc ----
+.dmypy.json
+dmypy.json
+.hypothesis/
