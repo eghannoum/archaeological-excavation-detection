@@ -2,7 +2,7 @@
 
 The module is extracted from three duplicated copies of the same parsing logic
 (``dataset_analysis.py``, ``visualize_augmentations.py``,
-``visualize_conversion.py``) — see ``docs/AUDIT.md``.
+``visualize_conversion.py``).
 """
 
 from PIL import Image

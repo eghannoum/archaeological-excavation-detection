@@ -6,7 +6,7 @@ and logs metrics to MLflow.
 Usage
 -----
     python scripts/eval_pr_curves.py
-    python scripts/eval_pr_curves.py --output docs/pr-curves
+    python scripts/eval_pr_curves.py --output outputs/pr-curves
     python scripts/eval_pr_curves.py --models yolo26n yolo26m faster_rcnn
     python scripts/eval_pr_curves.py --device cpu
 """
@@ -867,8 +867,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default=str(_PROJECT_ROOT / "docs" / "pr-curves"),
-        help="Output directory for plots (default: docs/pr-curves/)",
+        default=str(_PROJECT_ROOT / "outputs" / "pr-curves"),
+        help="Output directory for plots (default: outputs/pr-curves/)",
     )
     parser.add_argument(
         "--models",

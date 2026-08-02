@@ -19,7 +19,7 @@ Usage
 
 Outputs
 -------
-    docs/error-analysis/
+    outputs/error-analysis/
         error_type_pie.png
         size_error_bars.png
         confusion_heatmap.png
@@ -93,7 +93,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default=str(PROJECT_ROOT / "docs" / "error-analysis"),
+        default=str(PROJECT_ROOT / "outputs" / "error-analysis"),
         help="Output directory for plots and report",
     )
     parser.add_argument(
@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--significance-report",
-        default=str(PROJECT_ROOT / "docs" / "significance" / "significance_report.json"),
+        default=str(PROJECT_ROOT / "outputs" / "significance" / "significance_report.json"),
         help="Path to significance report JSON for auto-selecting best model",
     )
     return parser.parse_args()

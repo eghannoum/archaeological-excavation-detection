@@ -5,7 +5,7 @@ parent-scene distribution, and annotation quality assessment.
 
 Usage
 -----
-    python scripts/dataset_analysis.py --output docs/dataset-analysis.md
+    python scripts/dataset_analysis.py --output outputs/dataset-analysis.md
 
 The script analyses **train** and **val** splits in full. The **test** split
 receives image/annotation counts only (sealed, no bbox-level analysis).
@@ -837,7 +837,7 @@ def generate_report(
     _w(
         "---\n"
         "*Report generated automatically by ``scripts/dataset_analysis.py``. "
-        "Figures saved to ``docs/dataset-analysis/``.*"
+        "Figures saved to ``outputs/dataset-analysis/``.*"
     )
     _w()
 
@@ -855,8 +855,8 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="docs/dataset-analysis.md",
-        help="Path to write the Markdown report (default: docs/dataset-analysis.md)",
+        default="outputs/dataset-analysis.md",
+        help="Path to write the Markdown report (default: outputs/dataset-analysis.md)",
     )
     args = parser.parse_args()
 

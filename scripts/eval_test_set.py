@@ -6,8 +6,8 @@ scenes that were never seen during training or validation).
 
 Outputs
 -------
-    docs/test-set/test_results.json   — structured results for all models
-    docs/test-set/test_summary.csv    — tabular summary
+    outputs/test-set/test_results.json   — structured results for all models
+    outputs/test-set/test_summary.csv    — tabular summary
     MLflow experiment 'final_test_eval' — all metrics logged
 
 Supported models
@@ -58,7 +58,7 @@ IMAGES_VAL = DATASET_DIR / "images" / "val"
 LABELS_VAL = DATASET_DIR / "labels" / "val"
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 RUNS_DIR = PROJECT_ROOT / "runs"
-OUTPUT_DIR = PROJECT_ROOT / "docs" / "test-set"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "test-set"
 
 IMAGE_SIZE = 640
 NUM_CLASSES = 1
@@ -1055,7 +1055,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output",
         default=None,
-        help="Output directory (default: docs/test-set/)",
+        help="Output directory (default: outputs/test-set/)",
     )
     return parser.parse_args(argv)
 

@@ -1,7 +1,7 @@
 """Compute calibration curves, ECE, and MCE for all trained models.
 
 Generates per-model reliability diagrams and a comparison overlay plot saved
-to ``docs/calibration/``.  Logs ECE/MCE metrics to MLflow.
+to ``outputs/calibration/``.  Logs ECE/MCE metrics to MLflow.
 
 Supports all 9 models:
 - YOLO family: yolo26n, yolo26s, yolo26m, yolo26l, yolo26x, yolov8m, yolo11m
@@ -51,7 +51,7 @@ IMAGES_VAL = DATASET_DIR / "images" / "val"
 LABELS_VAL = DATASET_DIR / "labels" / "val"
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 RUNS_DIR = PROJECT_ROOT / "runs"
-OUTPUT_DIR = PROJECT_ROOT / "docs" / "calibration"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "calibration"
 
 # YOLO models (weights in runs/{model}/weights/best.pt, last fold only)
 YOLO_MODELS = ["yolo26n", "yolo26s", "yolo26m", "yolo26l", "yolo26x", "yolov8m", "yolo11m"]

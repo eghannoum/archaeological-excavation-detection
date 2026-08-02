@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 warnings.filterwarnings("ignore")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PLOTS_DIR = PROJECT_ROOT / "docs" / "hpo-plots"
-REPORT_PATH = PROJECT_ROOT / "docs" / "hpo-analysis.md"
+PLOTS_DIR = PROJECT_ROOT / "outputs" / "hpo-plots"
+REPORT_PATH = PROJECT_ROOT / "outputs" / "hpo-analysis.md"
 
 
 def main():

@@ -6,7 +6,7 @@ light and heavy augmented versions with bounding boxes drawn.
 Also validates bounding box integrity after augmentation.
 
 Usage:
-    python scripts/visualize_augmentations.py --samples 5 --output docs/augmentation-samples/
+    python scripts/visualize_augmentations.py --samples 5 --output outputs/augmentation-samples/
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=str,
-        default=str(PROJECT_ROOT / "docs" / "augmentation-samples"),
+        default=str(PROJECT_ROOT / "outputs" / "augmentation-samples"),
         help="Output directory for generated figures",
     )
     parser.add_argument(
