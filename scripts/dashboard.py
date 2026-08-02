@@ -15,6 +15,7 @@ import contextlib
 import csv
 import json
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -496,9 +497,17 @@ def run_batch(
 
 
 def open_output_folder(folder_path: str | None) -> None:
-    """Open the output folder in the file explorer."""
-    if folder_path and Path(folder_path).exists():
-        os.startfile(str(folder_path))
+    """Open the output folder in the platform file explorer."""
+    if not folder_path or not Path(folder_path).exists():
+        return
+    startfile = getattr(os, "startfile", None)
+    if startfile is not None:
+        startfile(folder_path)
+        return
+    if sys.platform == "darwin":
+        subprocess.run(["open", folder_path], check=False)
+    else:
+        subprocess.run(["xdg-open", folder_path], check=False)
 
 
 def build_batch_tab() -> None:
