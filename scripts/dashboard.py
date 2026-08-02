@@ -589,9 +589,11 @@ def create_demo() -> gr.Blocks:
             build_batch_tab()
 
         # Footer
+        model_path = _resolve_model_path()
+        model_path_text = "*none — run training first*" if model_path is None else f"`{model_path}`"
         gr.Markdown(
             "---\n"
-            f"**Model path:** `{TRAIN_DIR}/weights/`  \u00b7  "
+            f"**Model path:** {model_path_text}  \u00b7  "
             f"**Data:** `dataset/data.yaml`  \u00b7  "
             "Single class detection: **hole**"
         )
