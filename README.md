@@ -19,7 +19,7 @@ Requires **Python 3.10+** (developed on 3.12). CPU-only inference is supported; 
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/eghannoum/archaeological-excavation-detection.git
 cd STI-Unauthorized-Archaeological-Excavations
 
 # (Recommended) create a virtual environment
