@@ -130,12 +130,12 @@ def validate_bbox(cx: float, cy: float, w: float, h: float) -> bool:
     return lo <= cx <= hi and lo <= cy <= hi and 0.0 < w <= hi and 0.0 < h <= hi
 
 
-def image_dims(path: Path) -> tuple[int, int]:
+def image_dims(path: str | Path) -> tuple[int, int]:
     """Return the ``(width, height)`` of an image in pixels.
 
     Parameters
     ----------
-    path : Path
+    path : str or Path
         Path to the image file (any format Pillow can open).
 
     Returns

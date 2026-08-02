@@ -32,8 +32,10 @@ from PIL import Image  # noqa: E402
 
 try:
     from ultralytics import YOLO
+
+    UltralyticsYOLO: type[YOLO] | None = YOLO
 except ImportError:
-    YOLO = None  # type: ignore[assignment]
+    UltralyticsYOLO = None
 
 from scripts.model_registry import resolve_best  # noqa: E402
 
@@ -87,14 +89,14 @@ def load_model() -> YOLO | None:
     with _model_lock:
         if _model_instance is not None:
             return _model_instance
-        if YOLO is None:
+        if UltralyticsYOLO is None:
             raise ImportError("ultralytics is not installed — run: pip install ultralytics")
 
         model_path = _resolve_model_path()
         if model_path is None:
             return None
         try:
-            _model_instance = YOLO(str(model_path))
+            _model_instance = UltralyticsYOLO(str(model_path))
         except Exception:
             _model_instance = None
     return _model_instance
@@ -251,7 +253,7 @@ def build_metrics_tab() -> None:
             label="Metrics",
             show_label=False,
             row_count=5,
-            col_count=(2, "fixed"),
+            column_count=2,
         )
     else:
         gr.Markdown("*No metrics file found.*")
@@ -331,7 +333,7 @@ def run_inference(
         )
         count = len(data)
         summary = f"**{count} hole{'s' if count != 1 else ''} detected**  "
-        summary += f"· Avg confidence: {sum(d[1] for d in data) / count:.3f}"
+        summary += f"· Avg confidence: {sum(float(d[1]) for d in data) / count:.3f}"
     else:
         detections_df = pd.DataFrame(columns=["Class", "Confidence", "x1", "y1", "x2", "y2"])
         summary = "**No holes detected** — try lowering the confidence threshold."

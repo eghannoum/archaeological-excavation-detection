@@ -127,7 +127,11 @@ def update_best_model(
         return False
 
     current = get_best()
-    current_score = _extract_score(current.get("metrics")) if current else None
+    current_score: float | None = None
+    if current is not None:
+        current_metrics = current.get("metrics")
+        if current_metrics is not None:
+            current_score = _extract_score(current_metrics)
     if current is not None and current_score is not None and score <= current_score:
         logger.info(
             "Current best score %.4f >= new score %.4f; keeping existing best",
@@ -227,7 +231,7 @@ def scan_runs() -> dict | None:
         except (OSError, ValueError) as exc:
             logger.warning("Could not parse eval results %s: %s", eval_json, exc)
 
-    unscored = [
+    unscored: list[dict] = [
         {
             "model": str(pt_path),
             "metrics": {},

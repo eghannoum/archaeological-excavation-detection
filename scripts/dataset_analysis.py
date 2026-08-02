@@ -140,14 +140,14 @@ def analyse_split(split: str, analyse_bboxes: bool = True) -> dict[str, Any]:
     if not analyse_bboxes:
         # Count annotations without further analysis
         total_annotations = 0
-        scene_counter: Counter = Counter()
+        test_scene_counter: Counter = Counter()
         for lf in label_files:
             with open(lab_dir / lf) as fh:
                 total_annotations += sum(1 for line in fh if line.strip())
-            scene_counter[_extract_scene_id(lf)] += 1
+            test_scene_counter[_extract_scene_id(lf)] += 1
         result["num_annotations"] = total_annotations
-        result["num_scenes"] = len(scene_counter)
-        result["scenes"] = dict(scene_counter.most_common())
+        result["num_scenes"] = len(test_scene_counter)
+        result["scenes"] = dict(test_scene_counter.most_common())
         return result
 
     # -- Per-image annotation counts ---------------------------------------
