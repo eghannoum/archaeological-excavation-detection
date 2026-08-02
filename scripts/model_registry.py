@@ -37,6 +37,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import math
 import os
 import shutil
 from datetime import datetime, timezone
@@ -55,12 +56,19 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_score(metrics: dict) -> float | None:
-    """Return the best available score (mAP50 > mAP50-95 > f1_score), or ``None``."""
+    """Return the best available score (mAP50 > mAP50-95 > f1_score), or ``None``.
+
+    Non-finite values (NaN/inf) are treated like missing keys: they are
+    skipped, so a poisoned metric can never enter the registry.
+    """
     for key in ("mAP50", "mAP50-95", "f1_score"):
         try:
-            return float(metrics[key])
+            value = float(metrics[key])
         except (KeyError, TypeError, ValueError):
             continue
+        if not math.isfinite(value):
+            continue
+        return value
     return None
 
 
@@ -110,9 +118,16 @@ def update_best_model(
             metrics,
         )
         return False
+    if not math.isfinite(score):
+        logger.warning(
+            "Non-finite score %r in metrics %s; skipping update",
+            score,
+            metrics,
+        )
+        return False
 
     current = get_best()
-    current_score = _extract_score(current["metrics"]) if current else None
+    current_score = _extract_score(current.get("metrics")) if current else None
     if current is not None and current_score is not None and score <= current_score:
         logger.info(
             "Current best score %.4f >= new score %.4f; keeping existing best",
@@ -154,9 +169,12 @@ def _max_csv_mAP50(csv_path: Path) -> float | None:
                 if not raw:
                     continue
                 try:
-                    values.append(float(raw))
+                    value = float(raw)
                 except ValueError:
                     continue
+                if not math.isfinite(value):
+                    continue
+                values.append(value)
             return max(values) if values else None
     except OSError as exc:
         logger.warning("Could not parse results CSV %s: %s", csv_path, exc)
@@ -230,7 +248,7 @@ def resolve_best() -> Path:
     best = get_best()
     if best is not None:
         model = best.get("model")
-        if model and Path(model).exists():
+        if model and Path(model).is_file():
             return Path(model)
 
     scanned = scan_runs()

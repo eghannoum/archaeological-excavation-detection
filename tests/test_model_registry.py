@@ -115,6 +115,48 @@ def test_update_best_model_is_noop_without_usable_score(registry_env):
     assert not best_pt_path.exists()
 
 
+def test_update_best_model_rejects_nan_score(registry_env):
+    tmp_path, registry_path, best_pt_path = registry_env
+    checkpoint = tmp_path / "fake.pt"
+    checkpoint.write_bytes(b"weights-v1")
+
+    updated = model_registry.update_best_model(checkpoint, {"mAP50": float("nan")})
+
+    assert updated is False
+    assert not registry_path.exists()
+    assert not best_pt_path.exists()
+
+
+def test_update_best_model_rejects_inf_score(registry_env):
+    tmp_path, registry_path, best_pt_path = registry_env
+    checkpoint = tmp_path / "fake.pt"
+    checkpoint.write_bytes(b"weights-v1")
+
+    updated = model_registry.update_best_model(checkpoint, {"mAP50": float("inf")})
+
+    assert updated is False
+    assert not registry_path.exists()
+    assert not best_pt_path.exists()
+
+
+def test_update_best_model_no_keyerror_when_registry_missing_metrics_key(registry_env):
+    tmp_path, registry_path, best_pt_path = registry_env
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps({"model": "runs/x/weights/best.pt"}),
+        encoding="utf-8",
+    )
+    checkpoint = tmp_path / "fake.pt"
+    checkpoint.write_bytes(b"weights-v1")
+
+    updated = model_registry.update_best_model(checkpoint, {"mAP50": 0.5})
+
+    assert updated is True
+    assert best_pt_path.exists()
+    entry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert entry["metrics"] == {"mAP50": 0.5}
+
+
 # ---------------------------------------------------------------------------
 # get_best
 # ---------------------------------------------------------------------------
@@ -171,6 +213,44 @@ def test_scan_runs_picks_highest_mAP50_checkpoint(registry_env):
 
 def test_scan_runs_returns_none_when_no_outputs_exist(registry_env):
     assert model_registry.scan_runs() is None
+
+
+def test_scan_runs_ignores_nan_csv_cell(registry_env):
+    tmp_path, _, _ = registry_env
+    run_nan = tmp_path / "runs" / "exp_nan"
+    run_ok = tmp_path / "runs" / "exp_ok"
+    (run_nan / "weights").mkdir(parents=True)
+    (run_ok / "weights").mkdir(parents=True)
+    (run_nan / "weights" / "best.pt").write_bytes(b"a")
+    (run_ok / "weights" / "best.pt").write_bytes(b"b")
+    _write_results_csv(run_nan, [("0", "nan"), ("1", "0.55")])
+    _write_results_csv(run_ok, [("0", "0.75")])
+
+    best = model_registry.scan_runs()
+
+    assert best is not None
+    assert best["model"] == str(run_ok / "weights" / "best.pt")
+    assert best["metrics"] == {"mAP50": 0.75}
+    assert best["experiment"] == "exp_ok"
+
+
+def test_scan_runs_skips_run_with_only_nan_csv_values(registry_env):
+    tmp_path, _, _ = registry_env
+    run_nan = tmp_path / "runs" / "exp_nan"
+    run_ok = tmp_path / "runs" / "exp_ok"
+    (run_nan / "weights").mkdir(parents=True)
+    (run_ok / "weights").mkdir(parents=True)
+    (run_nan / "weights" / "best.pt").write_bytes(b"a")
+    (run_ok / "weights" / "best.pt").write_bytes(b"b")
+    _write_results_csv(run_nan, [("0", "nan"), ("1", "-nan")])
+    _write_results_csv(run_ok, [("0", "0.3")])
+
+    best = model_registry.scan_runs()
+
+    assert best is not None
+    assert best["model"] == str(run_ok / "weights" / "best.pt")
+    assert best["metrics"] == {"mAP50": 0.3}
+    assert best["experiment"] == "exp_ok"
 
 
 # ---------------------------------------------------------------------------
