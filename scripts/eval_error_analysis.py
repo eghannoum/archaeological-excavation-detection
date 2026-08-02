@@ -197,7 +197,7 @@ def load_yolo_labels(label_path: Path) -> list[dict[str, Any]]:
 
     Returns list of dicts with keys: class_id, bbox (x1y1x2y2 normalized).
     """
-    boxes = []
+    boxes: list[dict[str, Any]] = []
     if not label_path.exists():
         return boxes
 
@@ -334,7 +334,7 @@ def run_fasterrcnn_inference(
         for img_path in image_paths:
             img = Image.open(img_path).convert("RGB")
             orig_w, orig_h = img.size
-            img_resized = img.resize((image_size, image_size), Image.BILINEAR)
+            img_resized = img.resize((image_size, image_size), Image.Resampling.BILINEAR)
             img_tensor = torch.from_numpy(np.array(img_resized)).permute(2, 0, 1).float() / 255.0
             img_tensor = img_tensor.unsqueeze(0).to(device)
 
@@ -398,7 +398,7 @@ def run_detr_inference(
     with torch.no_grad():
         for img_path in image_paths:
             img = Image.open(img_path).convert("RGB")
-            img_resized = img.resize((image_size, image_size), Image.BILINEAR)
+            img_resized = img.resize((image_size, image_size), Image.Resampling.BILINEAR)
             img_tensor = torch.from_numpy(np.array(img_resized)).permute(2, 0, 1).float() / 255.0
             img_tensor = img_tensor.unsqueeze(0).to(device)
 
@@ -603,7 +603,7 @@ def compute_confusion_matrix(
     class_names_list = [CLASS_ID_TO_NAME.get(c, str(c)) for c in classes]
 
     # Initialize matrix
-    cm = {}
+    cm: dict[str, dict[str, int]] = {}
     for gt_class in class_names_list + ["background"]:
         cm[gt_class] = {}
         for pred_class in class_names_list + ["background"]:
@@ -821,14 +821,14 @@ def plot_confusion_heatmap(
     pred_classes.sort()
 
     # Build matrix
-    matrix = []
+    matrix_rows = []
     for gt_cls in gt_classes:
         row = []
         for pred_cls in pred_classes:
             row.append(confusion_matrix[gt_cls].get(pred_cls, 0))
-        matrix.append(row)
+        matrix_rows.append(row)
 
-    matrix = np.array(matrix, dtype=float)
+    matrix = np.array(matrix_rows, dtype=float)
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -872,13 +872,16 @@ def plot_confidence_histograms(
     all_predictions: dict[str, list[dict]],
     all_ground_truths: dict[str, list[dict]],
     iou_threshold: float = 0.5,
-    output_dir: Path = None,
+    output_dir: Path | None = None,
 ) -> None:
     """Plot confidence distributions split by correct/incorrect per class."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
+    if output_dir is None:
+        output_dir = Path.cwd()
 
     # Separate confidences by correctness
     correct_confs = defaultdict(list)

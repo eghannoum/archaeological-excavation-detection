@@ -405,8 +405,16 @@ def run_yolo_inference(
     for img_path, result in zip(image_paths, results, strict=False):
         stem = img_path.stem
         if result.boxes is not None and len(result.boxes) > 0:
-            boxes = result.boxes.xyxy.cpu().numpy().astype(np.float32)
-            scores = result.boxes.conf.cpu().numpy().astype(np.float32)
+            # Narrow the Tensor | ndarray union before .cpu(); ultralytics always
+            # returns tensors here, but the stubs leave the alternative open.
+            boxes_xyxy = result.boxes.xyxy
+            boxes_conf = result.boxes.conf
+            if isinstance(boxes_xyxy, torch.Tensor):
+                boxes_xyxy = boxes_xyxy.cpu().numpy()
+            if isinstance(boxes_conf, torch.Tensor):
+                boxes_conf = boxes_conf.cpu().numpy()
+            boxes = np.asarray(boxes_xyxy, dtype=np.float32)
+            scores = np.asarray(boxes_conf, dtype=np.float32)
         else:
             boxes = np.zeros((0, 4), dtype=np.float32)
             scores = np.zeros((0,), dtype=np.float32)
@@ -479,6 +487,11 @@ def run_detr_inference(
 
     hub_dir = Path.home() / ".cache" / "torch" / "hub" / "facebookresearch_detr_main"
     spec = importlib.util.spec_from_file_location("misc", hub_dir / "util" / "misc.py")
+    if spec is None or spec.loader is None:
+        raise ImportError(
+            "Could not load DETR helper module 'util/misc.py' from the torch hub cache. "
+            f"Expected at: {hub_dir / 'util' / 'misc.py'}"
+        )
     misc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(misc)
     NestedTensor = misc.NestedTensor
@@ -508,7 +521,7 @@ def run_detr_inference(
             pad_x = (imgsz - new_w) / 2.0
             pad_y = (imgsz - new_h) / 2.0
 
-            resized_img = img.resize((int(new_w), int(new_h)), Image.BILINEAR)
+            resized_img = img.resize((int(new_w), int(new_h)), Image.Resampling.BILINEAR)
             padded_img = Image.new("RGB", (imgsz, imgsz), (0, 0, 0))
             padded_img.paste(resized_img, (int(pad_x), int(pad_y)))
 
@@ -608,8 +621,8 @@ def plot_pr_curve_single(
         f"Optimal conf={optimal_conf:.3f}, F1={optimal_f1:.4f}",
         fontsize=13,
     )
-    ax.set_xlim([0, 1.05])
-    ax.set_ylim([0, 1.05])
+    ax.set_xlim((0, 1.05))
+    ax.set_ylim((0, 1.05))
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=11)
     fig.tight_layout()
@@ -651,8 +664,8 @@ def plot_f1_curve_single(
     ax.set_xlabel("Confidence Threshold", fontsize=12)
     ax.set_ylabel("F1 Score", fontsize=12)
     ax.set_title(f"F1-Confidence Curve — {model_name}", fontsize=13)
-    ax.set_xlim([0, 1])
-    ax.set_ylim([0, 1.05])
+    ax.set_xlim((0, 1))
+    ax.set_ylim((0, 1.05))
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=11)
     fig.tight_layout()
@@ -689,8 +702,8 @@ def plot_pr_overlay(
     ax.set_xlabel("Recall", fontsize=12)
     ax.set_ylabel("Precision", fontsize=12)
     ax.set_title(title, fontsize=13)
-    ax.set_xlim([0, 1.05])
-    ax.set_ylim([0, 1.05])
+    ax.set_xlim((0, 1.05))
+    ax.set_ylim((0, 1.05))
     ax.grid(True, alpha=0.3)
     ax.legend(loc="lower left", fontsize=10, framealpha=0.9)
     fig.tight_layout()
@@ -718,8 +731,8 @@ def plot_f1_overlay(
     ax.set_xlabel("Confidence Threshold", fontsize=12)
     ax.set_ylabel("F1 Score", fontsize=12)
     ax.set_title(title, fontsize=13)
-    ax.set_xlim([0, 1])
-    ax.set_ylim([0, 1.05])
+    ax.set_xlim((0, 1))
+    ax.set_ylim((0, 1.05))
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper right", fontsize=10, framealpha=0.9)
     fig.tight_layout()
@@ -737,7 +750,7 @@ def evaluate_model(
     model_name: str,
     model_info: dict[str, Any],
     image_paths: list[Path],
-    gt_by_image: dict[str, np.ndarray],
+    gt_by_image: dict[str, tuple[np.ndarray, tuple[int, int]]],
     device: str,
 ) -> dict[str, Any] | None:
     """Evaluate a single model and return metrics + curves data.
