@@ -437,8 +437,11 @@ def objective(
     params = _suggest_params(trial)
 
     # --- 2. MLflow trial run -------------------------------------------------
-    parent_active = study_run_id is not None and (
-        mlflow.active_run() is not None and mlflow.active_run().info.run_id == study_run_id
+    active_run = mlflow.active_run()
+    parent_active = (
+        study_run_id is not None
+        and active_run is not None
+        and active_run.info.run_id == study_run_id
     )
 
     if parent_active:
@@ -500,7 +503,11 @@ def objective(
         # 4a. Stream stdout, parse per-epoch mAP50, report for pruning
         _hpo_stdout = proc.stdout
         if sys.platform == "win32":
-            _hpo_stdout = io.TextIOWrapper(proc.stdout.buffer, encoding="utf-8", errors="replace")
+            _stdout_buffer = getattr(proc.stdout, "buffer", None)
+            if _stdout_buffer is not None:
+                _hpo_stdout = io.TextIOWrapper(_stdout_buffer, encoding="utf-8", errors="replace")
+        if _hpo_stdout is None:
+            raise RuntimeError("Training subprocess produced no stdout stream")
         _hpo_lines: list[str] = []  # buffer for post-hoc extraction
         for line in _hpo_stdout:
             _hpo_lines.append(line)

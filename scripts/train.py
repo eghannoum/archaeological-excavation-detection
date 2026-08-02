@@ -132,9 +132,17 @@ def _build_ultralytics_kwargs(cfg: DictConfig) -> dict[str, Any]:
     if aug and aug.get("enabled", False):
         ultralytics_aug = getattr(aug, "ultralytics", None)
         if ultralytics_aug is not None:
-            for k, v in OmegaConf.to_container(ultralytics_aug, resolve=True).items():
-                if k not in kwargs:
-                    kwargs[k] = v
+            aug_container = OmegaConf.to_container(ultralytics_aug, resolve=True)
+            if not isinstance(aug_container, dict):
+                logger.warning(
+                    "augmentation.ultralytics resolved to a non-dict (%s) — skipping",
+                    type(aug_container).__name__,
+                )
+            else:
+                for k, v in aug_container.items():
+                    key = str(k)
+                    if key not in kwargs:
+                        kwargs[key] = v
 
         # -- Albumentations integration (light/heavy mode) --
         mode = aug.get("mode", "ultralytics")
@@ -321,7 +329,8 @@ def train_yolo(cfg: DictConfig) -> tuple[Any, Path | None]:
     logger.debug("Ultralytics train kwargs: %s", kwargs)
 
     # Register per-epoch MLflow callback
-    run_id = mlflow.active_run().info.run_id if mlflow.active_run() else None
+    active_run = mlflow.active_run()
+    run_id = active_run.info.run_id if active_run is not None else None
     if run_id:
         model.add_callback("on_train_epoch_end", _make_epoch_callback(run_id))
 

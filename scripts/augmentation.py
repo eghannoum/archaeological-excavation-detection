@@ -268,8 +268,15 @@ def get_ultralytics_augmentation(cfg) -> dict[str, Any]:
     # 1. Ultralytics native augmentation params (hsv, fliplr, mosaic, etc.)
     ultralytics_aug = getattr(aug, "ultralytics", None)
     if ultralytics_aug is not None:
-        for k, v in OmegaConf.to_container(ultralytics_aug, resolve=True).items():
-            kwargs[k] = v
+        aug_container = OmegaConf.to_container(ultralytics_aug, resolve=True)
+        if not isinstance(aug_container, dict):
+            logger.warning(
+                "augmentation.ultralytics resolved to a non-dict (%s) — skipping",
+                type(aug_container).__name__,
+            )
+        else:
+            for k, v in aug_container.items():
+                kwargs[str(k)] = v
 
     # 2. Albumentations transforms list
     mode = aug.get("mode", "none")
@@ -351,14 +358,15 @@ def patch_yolodataset(mode: str = "light") -> None:
 
         return original_build_transforms(self, hyp)
 
-    _ds_module.YOLODataset.build_transforms = _patched_build_transforms
+    # Monkey-patch the class method (mypy can't express deliberate method replacement).
+    _ds_module.YOLODataset.build_transforms = _patched_build_transforms  # type: ignore[method-assign]
 
     # Also patch the re-exported reference if it exists
     try:
         import ultralytics.data as _data_module
 
         if hasattr(_data_module, "YOLODataset"):
-            _data_module.YOLODataset.build_transforms = _patched_build_transforms
+            _data_module.YOLODataset.build_transforms = _patched_build_transforms  # type: ignore[method-assign]
     except ImportError:
         pass
 

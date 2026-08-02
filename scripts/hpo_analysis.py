@@ -21,7 +21,11 @@ def main():
 
     mlflow.set_tracking_uri("sqlite:///mlruns/mlflow.db")
     exp = mlflow.get_experiment_by_name("yolo26m-hpo")
+    if exp is None:
+        raise SystemExit("MLflow experiment 'yolo26m-hpo' not found — run scripts/hpo.py first.")
     runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
+    if not isinstance(runs, pd.DataFrame):
+        raise TypeError(f"search_runs() returned {type(runs).__name__}, expected pandas.DataFrame")
     trial_runs = runs[runs["tags.trial_status"].notna()].copy()
     completed = trial_runs[trial_runs["tags.trial_status"] == "completed"].copy()
 
@@ -166,9 +170,9 @@ def main():
         mask = ~(vals.isna() | completed["metrics.val/mAP50"].isna())
         if mask.sum() > 2:
             z = np.polyfit(vals[mask], completed.loc[mask, "metrics.val/mAP50"], 1)
-            p = np.poly1d(z)
+            poly = np.poly1d(z)
             x_line = np.linspace(vals[mask].min(), vals[mask].max(), 100)
-            ax.plot(x_line, p(x_line), "--", color="#FF5722", alpha=0.8, linewidth=1.5)
+            ax.plot(x_line, poly(x_line), "--", color="#FF5722", alpha=0.8, linewidth=1.5)
         ax.set_xlabel(pname, fontsize=11)
         ax.set_ylabel("mAP50", fontsize=11)
         ax.set_title(
