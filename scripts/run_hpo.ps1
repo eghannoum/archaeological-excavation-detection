@@ -40,7 +40,7 @@ $stdoutReader = [System.Threading.Tasks.Task]::Run({
     }
 })
 
-# Read stderr asynchronously  
+# Read stderr asynchronously
 $stderrReader = [System.Threading.Tasks.Task]::Run({
     $reader = $proc.StandardError
     while (($line = $reader.ReadLine()) -ne $null) {
