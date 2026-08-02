@@ -32,6 +32,7 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 # ---------------------------------------------------------------------------
 # Ensure project root on sys.path
@@ -71,6 +72,13 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("eval_calibration")
+
+
+def _to_cpu_numpy(x: Any) -> np.ndarray:
+    """Convert a torch.Tensor or numpy.ndarray to a CPU numpy array."""
+    if isinstance(x, torch.Tensor):
+        return x.cpu().numpy()
+    return np.asarray(x)
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +327,8 @@ def run_yolo_calibration(
             if result.boxes is None or len(result.boxes) == 0:
                 continue
 
-            pred_boxes = result.boxes.xyxy.cpu().numpy()  # (M, 4)
-            pred_confs = result.boxes.conf.cpu().numpy()  # (M,)
+            pred_boxes = _to_cpu_numpy(result.boxes.xyxy)  # (M, 4)
+            pred_confs = _to_cpu_numpy(result.boxes.conf)  # (M,)
 
             # Compute IoU with all GT boxes
             if len(gt_boxes) > 0:
@@ -345,17 +353,17 @@ def run_yolo_calibration(
             "n_predictions": 0,
         }
 
-    all_confs = np.concatenate(all_confs)
-    all_correct = np.concatenate(all_correct)
+    confs_arr = np.concatenate(all_confs)
+    correct_arr = np.concatenate(all_correct)
 
-    bin_conf, bin_acc, bin_cnt = compute_calibration(all_confs, all_correct, n_bins)
+    bin_conf, bin_acc, bin_cnt = compute_calibration(confs_arr, correct_arr, n_bins)
     ece = compute_ece(bin_conf, bin_acc, bin_cnt)
     mce = compute_mce(bin_conf, bin_acc, bin_cnt)
 
     logger.info(
         "  %s: %d predictions, ECE=%.4f, MCE=%.4f",
         model_name,
-        len(all_confs),
+        len(confs_arr),
         ece,
         mce,
     )
@@ -366,7 +374,7 @@ def run_yolo_calibration(
         "bin_counts": bin_cnt,
         "ece": ece,
         "mce": mce,
-        "n_predictions": len(all_confs),
+        "n_predictions": len(confs_arr),
     }
 
 
@@ -407,6 +415,9 @@ def run_faster_rcnn_calibration(
         for img_path, gt_boxes in gt_data:
             # Load and preprocess image
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             orig_h, orig_w = img.shape[:2]
 
@@ -442,17 +453,17 @@ def run_faster_rcnn_calibration(
             "n_predictions": 0,
         }
 
-    all_confs = np.concatenate(all_confs)
-    all_correct = np.concatenate(all_correct)
+    confs_arr = np.concatenate(all_confs)
+    correct_arr = np.concatenate(all_correct)
 
-    bin_conf, bin_acc, bin_cnt = compute_calibration(all_confs, all_correct, n_bins)
+    bin_conf, bin_acc, bin_cnt = compute_calibration(confs_arr, correct_arr, n_bins)
     ece = compute_ece(bin_conf, bin_acc, bin_cnt)
     mce = compute_mce(bin_conf, bin_acc, bin_cnt)
 
     logger.info(
         "  faster_rcnn fold %d: %d predictions, ECE=%.4f, MCE=%.4f",
         fold_idx,
-        len(all_confs),
+        len(confs_arr),
         ece,
         mce,
     )
@@ -463,7 +474,7 @@ def run_faster_rcnn_calibration(
         "bin_counts": bin_cnt,
         "ece": ece,
         "mce": mce,
-        "n_predictions": len(all_confs),
+        "n_predictions": len(confs_arr),
     }
 
 
@@ -504,6 +515,9 @@ def run_detr_calibration(
         for img_path, gt_boxes in gt_data:
             # Load and preprocess image (DETR: letterbox resize with padding)
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             orig_h, orig_w = img.shape[:2]
 
@@ -555,17 +569,17 @@ def run_detr_calibration(
             "n_predictions": 0,
         }
 
-    all_confs = np.concatenate(all_confs)
-    all_correct = np.concatenate(all_correct)
+    confs_arr = np.concatenate(all_confs)
+    correct_arr = np.concatenate(all_correct)
 
-    bin_conf, bin_acc, bin_cnt = compute_calibration(all_confs, all_correct, n_bins)
+    bin_conf, bin_acc, bin_cnt = compute_calibration(confs_arr, correct_arr, n_bins)
     ece = compute_ece(bin_conf, bin_acc, bin_cnt)
     mce = compute_mce(bin_conf, bin_acc, bin_cnt)
 
     logger.info(
         "  detr fold %d: %d predictions, ECE=%.4f, MCE=%.4f",
         fold_idx,
-        len(all_confs),
+        len(confs_arr),
         ece,
         mce,
     )
@@ -576,7 +590,7 @@ def run_detr_calibration(
         "bin_counts": bin_cnt,
         "ece": ece,
         "mce": mce,
-        "n_predictions": len(all_confs),
+        "n_predictions": len(confs_arr),
     }
 
 

@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 
 # ---------------------------------------------------------------------------
 # Ensure project root on sys.path
@@ -103,6 +104,13 @@ logging.basicConfig(
 logger = logging.getLogger("eval_test_set")
 
 
+def _to_cpu_numpy(x: Any) -> np.ndarray:
+    """Convert a torch.Tensor or numpy.ndarray to a CPU numpy array."""
+    if isinstance(x, torch.Tensor):
+        return x.cpu().numpy()
+    return np.asarray(x)
+
+
 # ---------------------------------------------------------------------------
 # Scene-ID extraction (same as train_cv.py)
 # ---------------------------------------------------------------------------
@@ -165,7 +173,7 @@ def load_split_data(images_dir: Path, labels_dir: Path) -> list[tuple[Path, np.n
     """Load image paths and GT boxes for a dataset split."""
     import cv2
 
-    data = []
+    data: list[tuple[Path, np.ndarray]] = []
     if not images_dir.exists():
         logger.warning("Images directory not found: %s", images_dir)
         return data
@@ -385,8 +393,8 @@ def run_yolo_inference_at_conf(
         if result.boxes is not None and len(result.boxes) > 0:
             # YOLO returns xyxy in original image pixel space.
             # GT boxes are in IMAGE_SIZE space — scale predictions to match.
-            pred_boxes = result.boxes.xyxy.cpu().numpy().astype(np.float32)
-            pred_scores = result.boxes.conf.cpu().numpy()
+            pred_boxes = _to_cpu_numpy(result.boxes.xyxy).astype(np.float32)
+            pred_scores = _to_cpu_numpy(result.boxes.conf)
             scale_x = IMAGE_SIZE / orig_w
             scale_y = IMAGE_SIZE / orig_h
             pred_boxes[:, 0] *= scale_x
@@ -470,6 +478,9 @@ def run_faster_rcnn_inference_at_conf(
     with torch.no_grad():
         for img_path, _gt in data:
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s, skipping", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_resized = cv2.resize(img_rgb, (IMAGE_SIZE, IMAGE_SIZE))
             img_tensor = torch.from_numpy(img_resized).permute(2, 0, 1).float() / 255.0
@@ -523,6 +534,9 @@ def run_faster_rcnn_speed_benchmark(
     with torch.no_grad():
         for i, (img_path, _) in enumerate(data):
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s, skipping", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_resized = cv2.resize(img_rgb, (IMAGE_SIZE, IMAGE_SIZE))
             img_tensor = torch.from_numpy(img_resized).permute(2, 0, 1).float() / 255.0
@@ -573,6 +587,9 @@ def run_detr_inference_at_conf(
     with torch.no_grad():
         for img_path, _gt in data:
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s, skipping", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             orig_h, orig_w = img.shape[:2]
 
@@ -640,6 +657,9 @@ def run_detr_speed_benchmark(
     with torch.no_grad():
         for i, (img_path, _) in enumerate(data):
             img = cv2.imread(str(img_path))
+            if img is None:
+                logger.warning("Cannot read image: %s, skipping", img_path)
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             orig_h, orig_w = img.shape[:2]
 
