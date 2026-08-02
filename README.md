@@ -47,7 +47,7 @@ python scripts/train.py experiment=yolo26m
 ## Evaluation
 
 ```bash
-python scripts/evaluate.py --model models/yolo26m.pt --data dataset/data.yaml --split test
+python scripts/evaluate.py --model auto --data dataset/data.yaml --split test
 ```
 
 Writes `results.json` plus a confusion matrix; analysis scripts write to gitignored `outputs/`.
@@ -55,11 +55,48 @@ Writes `results.json` plus a confusion matrix; analysis scripts write to gitigno
 ## Inference & Dashboard
 
 ```bash
-python scripts/inference.py --model models/yolo26m.pt --source data/sample/ --save-img --save-csv
+python scripts/inference.py --model auto --source data/sample/ --save-img --save-csv
 python scripts/dashboard.py
 ```
 
 The Gradio dashboard serves on `http://localhost:7860` by default.
+
+## Training guide
+
+Convert COCO annotations to a YOLO dataset first:
+
+```bash
+python scripts/coco_to_yolo.py --coco-path data/annotations.json --image-dir data/images --output-dir dataset
+```
+
+Then train a single model:
+
+```bash
+python scripts/train.py experiment=yolo26m
+```
+
+- Smoke run: `python scripts/train.py experiment=yolo26m --info` prints the composed config; add `training.epochs=1` for a fast sanity run.
+- Cross-validation: `python scripts/train_cv.py experiment=yolo26m`
+- Hyperparameter optimization: `python scripts/hpo.py` (Windows: `scripts/run_hpo.ps1 -NTrials 50`)
+- Faster R-CNN: `python scripts/train_faster_rcnn.py`; DETR: `python scripts/train_detr.py`
+
+Weights land in `runs/{experiment}/weights/best.pt`; MLflow tracking data goes to `mlruns/` and analysis artifacts to gitignored `outputs/`.
+
+## Inference guide
+
+`--model` defaults to `auto`, which uses the best registered model (see below); an explicit path is used as-is:
+
+```bash
+python scripts/inference.py --model auto --source data/sample/ --save-img --save-csv
+```
+
+`--source` takes a single image, a folder, a glob pattern, a video file, or a webcam (`--source 0` or `--source webcam`). Other flags: `--conf`, `--iou`, `--imgsz`, `--batch`, `--save-img`, `--save-txt`, `--save-csv`, `--device`.
+
+Outputs land in `runs/inference/` (`images/`, `labels/`, `videos/`, `detections.csv`). For a browser UI run `python scripts/dashboard.py`; the Gradio dashboard serves on `http://localhost:7860`.
+
+## How the best model is chosen
+
+`train.py` and `evaluate.py` update `models/best.json` (plus a copy at `models/best.pt`) with the highest-mAP50 checkpoint they see. If the registry is empty, inference falls back to scanning `runs/*/results.csv`, `runs/eval/results.json`, and `experiments/*/fold_0_best.pt` for the best mAP50. An explicit `--model path` always overrides `auto`. In the benchmark table above, YOLO26-X is best by mAP50 and YOLO11-M best by F1.
 
 ## Results
 
@@ -86,6 +123,7 @@ configs/   Hydra configs (experiment, model, training, data, augmentation, cv, h
 scripts/   CLI entrypoints (train, train_cv, hpo, evaluate, inference, dashboard, analysis)
 tests/     pytest suite
 data/      raw imagery + COCO annotations (not distributed; data/sample/ for quickstart)
+models/    best-model registry (best.json + best.pt) + optional pre-downloaded base weights (gitignored)
 ```
 
 Generated artifacts (`dataset/`, `models/`, `runs/`, `experiments/`, `mlruns/`, `outputs/`) are gitignored and regenerable.
